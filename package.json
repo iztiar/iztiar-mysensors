@@ -1,0 +1,40 @@
+{
+  "name": "@iztiar/iztiar-mysensors",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Iztiar mySensors gateway",
+  "keywords": [
+    "iztiar",
+    "iztiar-plugin",
+    "forkable"
+  ],
+  "homepage": "https://github.com/iztiar/iztiar-mysensors",
+  "bugs": {
+    "url": "https://github.com/iztiar/iztiar-mysensors/issues",
+    "email": "iztiar-leader@trychlos.org"
+  },
+  "license": "GPL-3.0",
+  "author": "Pierre Wieser <iztiar-leader@trychlos.org> (https://github.com/orgs/iztiar/people/iztiar-0)",
+  "contributors": [],
+  "funding": [],
+  "main": "./src/main.js",
+  "exports": {
+    ".": "./src/main.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/iztiar/iztiar-mysensors.git"
+  },
+  "dependencies": {
+    "serialport": "^10.4.0"
+  },
+  "peerDependencies": {},
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">12.x",
+    "@iztiar/iztiar-core": ">0.6"
+  }
+}

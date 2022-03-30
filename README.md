@@ -1,13 +1,10 @@
 # Iztiar
 
-## iztiar-broker
+## iztiar-mysensors
 
-___iztiar-broker___ module provides a MQTT message broker to the Izitar family architecture.
+___iztiar-mysensors___ module provides a MySensors gateway to the Izitar family architecture.
 
-It is still rather simple at the moment, but, its first goal was to demonstrate the implentation of a daemon feature as a plugin.
+## MySensors
 
-From development point of view, and because ___iztiar-broker___ receives the full featureApi object at initialization time, it is able to take advantage of all resources (classes, interfaces, and so on) provided by the `@iztiar/iztiar-core` core module.
-
-### MQTT message broker
-
-It is based on [Aedes](https://github.com/moscajs/aedes).
+    [Serial API](https://www.mysensors.org/download/serial_api_20)
+    [Library API](https://www.mysensors.org/download/sensor_api_20)
