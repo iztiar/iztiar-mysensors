@@ -1,0 +1,88 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/iztiar/iztiar-core/schemas/mysensors-config.schema.json",
+    "title": "mySensorsConfig",
+    "description": "the configuration of the MySensors gateway",
+    "type": "object",
+    "patternProperties" : {
+        "^[a-zA-Z][a-zA-Z0-9-_]*$": {
+            "type": "object",
+            "description": "the name of the service",
+            "properties": {
+                "module": {
+                    "type": "string",
+                    "description": "the name of the module which provides the feature, or 'core'"
+                },
+                "class": {
+                    "type": "string",
+                    "description": "the name of the class which provides the feature",
+                    "default": "empty"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "description": "whether the feature is enabled",
+                    "default": true
+                },
+                "ITcpServer": {
+                    "type": "object",
+                    "description": "TCP server options (see ITcpServer schema); default port being set here to 24010"
+                },
+                "mySensors": {
+                    "type": "object",
+                    "description": "the mySensors service feature configuration",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "description": "the type of the hardware gateway",
+                            "enum": [ "serial", "MQTT", "network" ]
+                        },
+                        "serial": {
+                            "type": "object",
+                            "description": "configuration of serial gateway",
+                            "properties": {
+                                "port": {
+                                    "type": "string",
+                                    "description": "the serial port from which data are read, and to which data are written"
+                                }
+                            }
+                        },
+                        "IMqttClient": {
+                            "type": "object",
+                            "description": "configuration of MQTT message bus to the device",
+                            "properties": {
+                                "topics": {
+                                    "type": "object",
+                                    "description": "the topics to publish/subscribe to",
+                                    "properties": {
+                                        "fromDevices": {
+                                            "type": "string",
+                                            "description": "the root topic to be subscribed to receive messages sent by the devices"
+                                        },
+                                        "toDevices": {
+                                            "type": "string",
+                                            "description": "the root topic to be used when publishing to the devices"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "network": {
+                            "type": "object",
+                            "description": "configuration of network gateway",
+                            "properties": {
+                                "host": {
+                                    "type": "string",
+                                    "description": "the host to which connect to get and set datas (depending of the type)"
+                                },
+                                "port": {
+                                    "type": "integer",
+                                    "description": "the TCP port number from which data are read, and to which data are written"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
