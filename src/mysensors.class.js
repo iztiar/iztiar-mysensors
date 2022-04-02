@@ -4,7 +4,8 @@
  * The class which implements the gateway to MySensors network and devices.
  * See mysensors.routes.js for the needed add-on to the REST API.
  */
-import { mySensorsMessage } from './imports.js';
+import { mysConsts } from './consts.js';
+import { mysMessage } from './imports.js';
 
 export class mySensorsClass {
 
@@ -309,23 +310,6 @@ export class mySensorsClass {
     }
 
     /*
-     * Internal stats have been modified
-     * @param {Object} status of the ITcpServer
-     * [-implementation Api-]
-     * Note:
-     *  As of v0.x, ITcpServer stats are preferably published in the MQTT alive message.
-     *  Keep the runfile as light as possible.
-     */
-    /*
-    itcpserverStatsUpdated( status ){
-        const featProvider = this.IFeatureProvider;
-        featProvider.api().exports().Msg.debug( 'mySensors.itcpserverStatsUpdated()' );
-        const _name = featProvider.feature().name();
-        this.IRunFile.set([ _name, 'ITcpServer' ], status );
-    }
-    */
-
-    /*
      * @returns {Promise} which must resolve to an object conform to check-status.schema.json
      */
     checkableStatus(){
@@ -345,6 +329,83 @@ export class mySensorsClass {
     }
 
     /**
+     * Deal with messages received from a device: what to do with it?
+     *  - either ignore, leaving to the MySensors library the responsability to handle it
+     *  - directly answer to the device from the gateway
+     *  - forward the information/action to the controlling application
+     * @param {mysMessage} msg
+     */
+    incomingMessage( msg ){
+        const exports = this.IFeatureProvider.api().exports();
+        if( msg.isIncomingAck()){
+            exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring ack message', msg );
+        } else {
+            switch( msg.command_str ){
+                // presentation message are sent by the device on each boot of the device
+                //  this is a good time to register them in the controller application (as far as as we are in inclusion mode)
+                case mysConsts.C.C_PRESENTATION:
+                    break;
+                case mysConsts.C.C_SET:
+                    break;
+                case mysConsts.C.C_REQ:
+                    break;
+                // some of the internal messages are to be forwarded to the controlling application
+                //  while some may be answered by the gateway itself
+                //  some are not incoming message at all
+                case mysConsts.C.C_INTERNAL:
+                    switch( msg.type_str ){
+                        // to be transmitted to the controller
+                        case mysConsts.I.I_BATTERY_LEVEL:
+                        case mysConsts.I.I_ID_REQUEST:
+                                break;
+                        // to be answered by the gateway
+                        case mysConsts.I.I_TIME:
+                        case mysConsts.I.I_VERSION:
+                                break;
+                        case mysConsts.I.I_ID_RESPONSE:
+                        case mysConsts.I.I_FIND_PARENT:
+                        case mysConsts.I.I_FIND_PARENT_RESPONSE:
+                        case mysConsts.I.I_NONCE_REQUEST:
+                        case mysConsts.I.I_NONCE_RESPONSE:
+                        case mysConsts.I.I_HEARTBEAT_REQUEST:
+                        case mysConsts.I.I_DISCOVER_REQUEST:
+                        case mysConsts.I.I_DISCOVER_RESPONSE:
+                        case mysConsts.I.I_HEARTBEAT_RESPONSE:
+                        case mysConsts.I.I_REGISTRATION_REQUEST:
+                        case mysConsts.I.I_REGISTRATION_RESPONSE:
+                        case mysConsts.I.I_SIGNAL_REPORT_REQUEST:
+                        case mysConsts.I.I_SIGNAL_REPORT_REVERSE:
+                        case mysConsts.I.I_SIGNAL_REPORT_RESPONSE:
+                        case mysConsts.I.I_PRE_SLEEP_NOTIFICATION:
+                        case mysConsts.I.I_POST_SLEEP_NOTIFICATION:
+                            exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring unexpected internal message', msg );
+                            break;
+
+                        case mysConsts.I.I_INCLUSION_MODE:
+                        case mysConsts.I.I_CONFIG:
+
+                        case mysConsts.I.I_LOG_MESSAGE:
+                        case mysConsts.I.I_CHILDREN:
+                        case mysConsts.I.I_SKETCH_NAME:
+                        case mysConsts.I.I_SKETCH_VERSION:
+                        case mysConsts.I.I_REBOOT:
+                        case mysConsts.I.I_GATEWAY_READY:
+                        case mysConsts.I.I_SIGNING_PRESENTATION:
+                        case mysConsts.I.I_PRESENTATION:
+                        case mysConsts.I.I_LOCKED:
+                        case mysConsts.I.I_PING:
+                        case mysConsts.I.I_PONG:
+                        case mysConsts.I.I_DEBUG:
+                    }
+                    break;
+                case mysConsts.C.C_STREAM:
+                    exports.Msg.info( 'mySensorsClass.incomingMessage() unexpected command (not the right sens for an OTA firmware update)', msg );
+                    break;
+            }
+        }
+    }
+
+    /**
      * A message has been received from a device through the MQTT message bus
      * @param {String} topic 
      * @param {String payload 
@@ -355,10 +416,9 @@ export class mySensorsClass {
         // if we are here, we are sure we have a 'subscribedTopic'
         const _strmsg = topic.substring( this._subscribedTopic.length-1 ).replace( /\//g, ';' )+';'+JSON.parse( payload );
         exports.Msg.debug( 'mySensorsClass.mqttReceived()', '_strmsg='+_strmsg );
-        const _mysmsg = new mySensorsMessage( this.IFeatureProvider, _strmsg );
+        const _mysmsg = new mysMessage().incoming( this.IFeatureProvider, _strmsg );
         // what to do with this message now ?
-        // check that nodeid exists if set -> have to map the mySensors nodeid to a Iztiar equipement identifier
-        exports.Msg.debug( 'mySensorsClass.mqttReceived()', _mysmsg );
+        this.incomingMessage( _mysmsg );
     }
 
     /**

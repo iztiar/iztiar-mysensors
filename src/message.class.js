@@ -13,23 +13,28 @@
  * 
  *      node-id ; child-sensor-id ; command ; ack ; type ; payload \n
  * 
- * **The maximum payload size is 25 bytes!**
+ * The maximum payload size is 25 bytes!
  * The nRF24L01+ has a maximum of 32 bytes. The MySensors library (version 2.x) uses 7 bytes for the message header.
  * 
  * The ack parameter has the following meaning:
  *      Outgoing: 0 = unacknowledged message, 1 = request ack from destination node,
  *      Incoming: 0 = normal message, 1 = this is an ack message
  */
-import { mySensorsConsts } from './imports.js';
+import { mysConsts } from './imports.js';
 
-export class mySensorsMessage {
+export class mysMessage {
+
+    static c = {
+        INCOMING: 'incoming',   // from the device to the controller
+        OUTGOING: 'outgoing'    // from the controller to the device
+    };
 
     static commandStr( cmd ){
-        return mySensorsMessage.str( mySensorsConsts.C, cmd );
+        return mysMessage.str( mysConsts.C, cmd );
     }
 
     static typeStr( ref, type ){
-        return mySensorsMessage.str( ref, type );
+        return mysMessage.str( ref, type );
     }
 
     static str( ref, value ){
@@ -44,9 +49,6 @@ export class mySensorsMessage {
         return _key;
     }
 
-    // internal IFeatureProvider
-    _provider = null;
-
     // message data
     node_id = null;
     sensor_id = null;
@@ -56,75 +58,82 @@ export class mySensorsMessage {
     type = null;
     type_str = null;
     payload = null;
+    sens = null;
 
     /**
-     * Instanciates a new mySensorsMessage
+     * Initialize an incoming message
      * @param {IFeatureProvider} provider
-     * @param {*} data 
-     * @returns {mySensorsMessage}
+     * @param {*} data the serial string semi-comma-separated message
+     * @returns {mysMessage}
      * @throws {Error}
      */
-    constructor( provider, data ){
-        this._provider = provider;
+    incoming( provider, data ){
         const exports = provider.api().exports();
         let errs = 0;
-
         if( data ){
             let strs = data.replace( /\n$/, '' ).split( /\s*;\s*/ );
             if( !strs || strs.length < 5 ){
-                exports.Msg.error( 'mySensorsMessage: data=\''+data+'\': invalid message' );
+                exports.Msg.error( 'mysMessage: data=\''+data+'\': invalid message' );
                 errs += 1;
             } else {
                 this.node_id = strs[0];
                 if( !exports.utils.isInt( this.node_id ) || this.node_id > 255 ){
-                    exports.Msg.error( 'mySensorsMessage: node_id=\''+this.node_id+'\': invalid value' );
+                    exports.Msg.error( 'mysMessage: node_id=\''+this.node_id+'\': invalid value' );
                     errs += 1;
                 }
                 this.sensor_id = strs[1];
                 if( !exports.utils.isInt( this.sensor_id ) || this.sensor_id > 255 ){
-                    exports.Msg.error( 'mySensorsMessage: sensor_id=\''+this.sensor_id+'\': invalid value' );
+                    exports.Msg.error( 'mysMessage: sensor_id=\''+this.sensor_id+'\': invalid value' );
                     errs += 1;
                 }
                 this.command = strs[2];
-                if( !Object.values( mySensorsConsts.C ).includes( this.command )){
-                    exports.Msg.error( 'mySensorsMessage: command=\''+this.command+'\': invalid value' );
+                if( !Object.values( mysConsts.C ).includes( this.command )){
+                    exports.Msg.error( 'mysMessage: command=\''+this.command+'\': invalid value' );
                     errs += 1;
                 } else {
-                    this.command_str = mySensorsMessage.commandStr( this.command );
+                    this.command_str = mysMessage.commandStr( this.command );
                 }
                 this.ack = strs[3];
-                if( this.ack != '0' && this.ack != '1' ){
-                    exports.Msg.error( 'mySensorsMessage: ack=\''+this.ack+'\': invalid value' );
+                if( this.ack !== '0' && this.ack !== '1' ){
+                    exports.Msg.error( 'mysMessage: ack=\''+this.ack+'\': invalid value' );
                     errs += 1;
                 }
                 this.type = strs[4];
                 let ref = null;
                 switch( this.command ){
-                    case mySensorsConsts.C.C_PRESENTATION:
-                        ref = mySensorsConsts.S;
+                    case mysConsts.C.C_PRESENTATION:
+                        ref = mysConsts.S;
                         break;
-                    case mySensorsConsts.C.C_SET:
-                    case mySensorsConsts.C.C_REQ:
-                        ref = mySensorsConsts.V;
+                    case mysConsts.C.C_SET:
+                    case mysConsts.C.C_REQ:
+                        ref = mysConsts.V;
                         break;
-                    case mySensorsConsts.C.C_INTERNAL:
-                        ref = mySensorsConsts.I;
+                    case mysConsts.C.C_INTERNAL:
+                        ref = mysConsts.I;
                         break;
                 }
                 if( ref ){
                     if( !Object.values( ref ).includes( this.type )){
-                        exports.Msg.error( 'mySensorsMessage: type=\''+this.type+'\': invalid value' );
+                        exports.Msg.error( 'mysMessage: type=\''+this.type+'\': invalid value' );
                         errs += 1;
                     } else {
-                        this.type_str = mySensorsMessage.typeStr( ref, this.type );
+                        this.type_str = mysMessage.typeStr( ref, this.type );
                     }
                 }
                 this.payload = strs[5];
+                this.sens = mysMessage.c.INCOMING;
             }
         }
         if( errs ){
-            throw new Error( 'mySensorsMessage: unable to instanciate a new object' );
+            throw new Error( 'mysMessage: unable to instanciate the object' );
         }
         return this;
+    }
+
+    /**
+     * @returns {Boolean} true if the message is a received acknowledge
+     */
+    isIncomingAck(){
+        return this.sens === mysMessage.c.INCOMING && this.ack === '1';
     }
 }
