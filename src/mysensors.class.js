@@ -60,7 +60,7 @@ export class mySensorsClass {
     // when stopping, the port to which answer and forward the received messages
     _forwardPort = 0;
 
-    // the subscribed-to topic when acting as a MQTT gateway (received messages from the devices)
+    // the subscribed-to topics when acting as a MQTT gateway (received messages from the devices)
     _subscribedTopic = null;
 
     /**
@@ -201,7 +201,7 @@ export class mySensorsClass {
             return Promise.resolve( true )
                 .then(() => { this.ITcpServer.create( featCard.config().ITcpServer.port ); })
                 .then(() => { exports.Msg.debug( 'mySensorsClass.ifeatureproviderStart() tcpServer created' ); })
-                .then(() => { this.IMqttClient.advertise( featCard.config().IMqttClient ); })
+                .then(() => { this.IMqttClient.connects(); })
                 .then(() => { this.mqttSubscribe(); })
                 .then(() => { return new Promise(() => {}); });
         } else {
@@ -429,18 +429,27 @@ export class mySensorsClass {
         const exports = this.IFeatureProvider.api().exports();
         exports.Msg.debug( 'mySensorsClass.mqttSubscribe()' );
         const _config = this.IFeatureProvider.feature().config();
-        if( _config && _config.IMqttClient && _config.IMqttClient.topics && _config.IMqttClient.topics.fromDevices ){
-            let _topic = _config.IMqttClient.topics.fromDevices;
-            let _last = _topic.charAt( _topic.length-1 );
-            if( _last !== '#' ){
-                if( _last !== '/'){
-                    _topic += '/';
+        let _found = false;
+        const _clients = this.IMqttClient.getConnections();
+        Object.keys( _clients ).every(( key ) => {
+            const _conf = _config[key];
+            if( _conf && _conf.topics && _conf.topics.fromDevices ){
+                let _topic = _conf.topics.fromDevices;
+                let _last = _topic.charAt( _topic.length-1 );
+                if( _last !== '#' ){
+                    if( _last !== '/'){
+                        _topic += '/';
+                    }
+                    _topic += '#';
                 }
-                _topic += '#';
+                _found = true;
+                _clients[key].subscribe( _topic, this, this.mqttReceived );
+                this._subscribedTopic = _topic;
+                return false;
             }
-            this.IMqttClient.subscribe( _topic, this, this.mqttReceived );
-            this._subscribedTopic = _topic;
-        } else {
+            return true;
+        });
+        if( !_found ){
             exports.Msg.warn( 'mySensorsClass.mqttSubscribe() configuration doesn\'t provide root topic to be subscribed to' );
         }
     }
