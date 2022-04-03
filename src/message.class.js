@@ -61,6 +61,22 @@ export class mysMessage {
     sens = null;
 
     /**
+     * @param {mysMessage} msg a message
+     * @returns {mysMessage} the input message has been copied here
+     */
+    copy( msg ){
+        this.node_id = msg.node_id;
+        this.sensor_id = msg.sensor_id;
+        this.command = msg.command;
+        this.command_str = mysMessage.commandStr( this.command );
+        this.ack = msg.ack;
+        this.type = msg.type;
+        this.type_str = this.setType();
+        this.payload = msg.payload;
+        this.sens = msg.sens;
+    }
+
+    /**
      * Initialize an incoming message
      * @param {IFeatureProvider} provider
      * @param {*} data the serial string semi-comma-separated message
@@ -135,5 +151,45 @@ export class mysMessage {
      */
     isIncomingAck(){
         return this.sens === mysMessage.c.INCOMING && this.ack === '1';
+    }
+
+    /**
+     * on outgoing messages, request an acknowledge
+     */
+    requestAck(){
+        this.ack = '1';
+    }
+
+    /**
+     * @param {*} data set the payload of the message
+     */
+    setPayload( data ){
+        let _str = data ? data.toString() : "";
+        if( _str.length > 25 ){
+            _str = _str.substring( 0, 25 );
+        }
+        this.payload = _str;
+    }
+
+    /**
+     * setup the type of the message
+     */
+    setType(){
+        let ref = null;
+        switch( this.command ){
+            case mysConsts.C.C_PRESENTATION:
+                ref = mysConsts.S;
+                break;
+            case mysConsts.C.C_SET:
+            case mysConsts.C.C_REQ:
+                ref = mysConsts.V;
+                break;
+            case mysConsts.C.C_INTERNAL:
+                ref = mysConsts.I;
+                break;
+        }
+        if( ref ){
+            this.type_str = mysMessage.str( ref, this.type );
+        }
     }
 }

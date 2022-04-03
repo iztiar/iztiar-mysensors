@@ -1,0 +1,6 @@
+Some simulation messages over MQTT bus:
+
+nodeid  sensorid object                mqtt message                                expected answer from gw                  payload
+11      22       request for time      jeedomv4/mySensors/fromDevice/11/22/3/0/1   jeedomv4/mySensors/toDevice/11/22/3/1/1  "1649002768776"
+11      22       request for version   jeedomv4/mySensors/fromDevice/11/22/3/0/2   jeedomv4/mySensors/toDevice/11/22/3/1/2  "0.1.0"
+11      22       request for config    jeedomv4/mySensors/fromDevice/11/22/3/0/6   jeedomv4/mySensors/toDevice/11/22/3/1/6  "M"

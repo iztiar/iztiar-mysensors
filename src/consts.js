@@ -1,6 +1,14 @@
 /*
  * consts.js
  * See https://www.mysensors.org/download/serial_api_20
+ * 
+ * Iztiar note:
+ * 
+ *  The MySensors protocol plans communications between sensors, between sensor and the gateway, and between gateway and controller.
+ *  Iztiar considers that:
+ *  - communication between MySensors sensors is out of its perimeter
+ *  - communication between MySensors gateway and Iztiar controller cannot ben handled by MySensors protocol, but must be protocol agnostic
+ *      (managed here by the ITcpSerger)
  */
 
 //let mysConsts = {};

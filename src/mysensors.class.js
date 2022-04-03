@@ -13,7 +13,11 @@ export class mySensorsClass {
      * Defaults
      */
     static d = {
-        listenPort: 24010       // TCP port number for controller -> gateway comm
+        listenPort: 24010,       // TCP port number for controller -> gateway comm
+        gwport: 24009,           // TCP port for net gateway -> devices
+        gwhost: 'localhost',
+        gwusb: '/dev/usb',
+        config: 'M'
     };
 
     /**
@@ -33,6 +37,10 @@ export class mySensorsClass {
             label: 'stop this mySensors service',
             fn: mySensorsClass._izStop,
             end: true
+        },
+        'mySensors': {
+            label: 'mySensors command',
+            fn: mySensorsClass._mySensorsCmd
         }
     };
 
@@ -54,14 +62,48 @@ export class mySensorsClass {
         });
     }
 
+    // a 'mySensors' command received from the application
+    static _mySensorsCmd( self, reply ){
+        if( reply.args.length >= 1 ){
+            const _args1 = reply.args.length >= 2 ? reply.args[1] : null;
+            switch( reply.args[0] ){
+
+                // inclusion on|off
+                case 'inclusion':
+                    if( _args1 === 'on' || _args1 === 'off' ){
+                        self._inclusionMode = ( _args1 === 'on' );
+                    } else {
+                        reply.answer = "mySensors 'inclusion' command expects one 'on|off' argument, '"+_args1+"' found";
+                    }
+                    break;
+
+                default:
+                    reply.answer = "unknown '"+reply.args[0]+"' mySensors command";
+                    break;
+            }
+        } else {
+            reply.answer = "mySensors command expects at least one argument";
+        }
+        return Promise.resolve( reply );
+    }
+
     // when this feature has started
     _started = null;
 
     // when stopping, the port to which answer and forward the received messages
     _forwardPort = 0;
 
+    // mqtt data
     // the subscribed-to topics when acting as a MQTT gateway (received messages from the devices)
-    _subscribedTopic = null;
+    _mqttSubscribedTopic = null;
+    _mqttKey = null;
+    _mqttConnection = null;
+    _mqttPublishTopic = null;
+
+    // is inclusion mode
+    _inclusionMode = false;
+
+
 
     /**
      * @param {engineApi} api the engine API as described in engine-api.schema.json
@@ -146,6 +188,61 @@ export class mySensorsClass {
         if( Object.keys( _filled ).includes( 'ITcpServer' ) && !Object.keys( _filled.ITcpServer ).includes( 'port' )){
             _filled.ITcpServer.port = mySensorsClass.d.listenPort;
         }
+        if( !_filled.mySensors ){
+            throw new Error( 'mySensorsClass expects a \'mySensors\' configuration group' );
+        }
+        if( _filled.mySensors.type !== 'mqtt' && _filled.mySensors.type !== 'net' && _filled.mySensors.type !== 'serial' ){
+            throw new Error( 'mySensorsClass expects a \'mySensors.type\' gateway type, found \''+_filled.mySensors.type+'\'' );
+        }
+        if( !_filled.mySensors.config ){
+            _filled.mySensors.config = mySensorsClass.d.config;
+        }
+        // depending of the mySensors gateway type, we must have an ad-hoc configuration group
+        let _found = false;
+        const _starts = 'IMqttClient.';
+        Object.keys( _filled ).every(( k ) => {
+            switch( _filled.mySensors.type ){
+                case 'mqtt':
+                    if( k.startsWith( _starts )){
+                        if( _filled[k].topics && _filled[k].topics.fromDevices && _filled[k].topics.toDevices ){
+                            _found = true;
+                            this._mqttKey = k;
+                            this._mqttPublishTopic = _filled[k].topics.toDevices;
+                            let _last = this._mqttPublishTopic.charAt( this._mqttPublishTopic.length-1 );
+                            if( _last !== '/' ){
+                                this._mqttPublishTopic += '/';
+                            }
+                            return false;
+                        }
+                    }
+                    break;
+                case 'net':
+                    if( k === 'net' ){
+                        _found = true;
+                        if( !_filled.net.host ){
+                            _filled.net.host = mySensorsClass.d.gwhost;
+                        }
+                        if( !_filled.net.port ){
+                            _filled.net.port = mySensorsClass.d.gwport;
+                        }
+                        return false;
+                    }
+                    break;
+                case 'serial':
+                    if( k === 'serial' ){
+                        _found = true;
+                        if( !_filled.serial.port ){
+                            _filled.serial.port = mySensorsClass.d.gwusb;
+                        }
+                        return false;
+                    }
+                    break;
+            }
+            return true;
+        });
+        if( !_found ){
+            throw new Error( 'mySensorsClass expects a configuration group for \''+_filled.mySensors.type+'\' which was not found' );
+        }
         return this.IFeatureProvider.fillConfig( _filled ).then(( c ) => { return feature.config( c ); });
     }
 
@@ -202,7 +299,19 @@ export class mySensorsClass {
                 .then(() => { this.ITcpServer.create( featCard.config().ITcpServer.port ); })
                 .then(() => { exports.Msg.debug( 'mySensorsClass.ifeatureproviderStart() tcpServer created' ); })
                 .then(() => { this.IMqttClient.connects(); })
-                .then(() => { this.mqttSubscribe(); })
+                .then(() => {
+                    switch( featCard.config().mySensors.type ){
+                        case 'mqtt':
+                            this.mqttSubscribe();
+                            break;
+                        case 'net':
+                            exports.Msg.debug( 'mySensorsClass.ifeatureproviderStart()', 'type \'net\' not implemented' );
+                            break;
+                        case 'serial':
+                            exports.Msg.debug( 'mySensorsClass.ifeatureproviderStart()', 'type \'serial\' not implemented' );
+                            break;
+                    }
+                })
                 .then(() => { return new Promise(() => {}); });
         } else {
             return Promise.resolve( exports.IForkable.fork( name, cb, args ));
@@ -337,36 +446,76 @@ export class mySensorsClass {
      */
     incomingMessage( msg ){
         const exports = this.IFeatureProvider.api().exports();
+        exports.Msg.debug( 'mySensorsClass.incomingMessages()', msg );
         if( msg.isIncomingAck()){
-            exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring ack message', msg );
+            exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring incoming ack message', msg );
         } else {
-            switch( msg.command_str ){
+            switch( msg.command ){
                 // presentation message are sent by the device on each boot of the device
                 //  this is a good time to register them in the controller application (as far as as we are in inclusion mode)
                 case mysConsts.C.C_PRESENTATION:
+                    if( this._inclusionMode ){
+                        this.sendToController( 'createDevice', msg );
+                    } else {
+                        exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
+                    }
                     break;
                 case mysConsts.C.C_SET:
+                    this.sendToController( 'setValue', msg );
                     break;
                 case mysConsts.C.C_REQ:
+                    this.sendToController( 'requestValue', msg );
                     break;
                 // some of the internal messages are to be forwarded to the controlling application
                 //  while some may be answered by the gateway itself
                 //  some are not incoming message at all
                 case mysConsts.C.C_INTERNAL:
-                    switch( msg.type_str ){
+                    switch( msg.type ){
                         // to be transmitted to the controller
                         case mysConsts.I.I_BATTERY_LEVEL:
+                            this.sendToController( 'setBatteryLevel', msg );
+                            break;
+                        // request a new Id from a controller, have to answer to the device
                         case mysConsts.I.I_ID_REQUEST:
-                                break;
+                            this.reqAnswerFromController( 'getNextId', msg );
+                            break;
                         // to be answered by the gateway
                         case mysConsts.I.I_TIME:
+                            this.sendToDevice( msg, Date.now());
+                            break;
                         case mysConsts.I.I_VERSION:
-                                break;
+                            this.sendToDevice( msg, this.IFeatureProvider.feature().packet().getVersion());
+                            break;
+                        case mysConsts.I.I_CONFIG:
+                            this.sendToDevice( msg, this.IFeatureProvider.feature().config().mySensors.config );
+                            break;
+                        case mysConsts.I.I_LOG_MESSAGE:
+                            exports.Logger.info( 'mySensorsClass.incomingMessage()', msg );
+                            break;
+                        case mysConsts.I.I_SKETCH_NAME:
+                            this.sendToController( 'setSketchName', msg );
+                            break;
+                        case mysConsts.I.I_SKETCH_VERSION:
+                            this.sendToController( 'setSketchVersion', msg );
+                            break;
+                        case mysConsts.I.I_DEBUG:
+                            exports.Logger.debug( 'mySensorsClass.incomingMessage()', msg );
+                            break;
+                        // these messages should never be incoming or are just ignored
+                        case mysConsts.I.I_INCLUSION_MODE:
                         case mysConsts.I.I_ID_RESPONSE:
                         case mysConsts.I.I_FIND_PARENT:
                         case mysConsts.I.I_FIND_PARENT_RESPONSE:
+                        case mysConsts.I.I_CHILDREN:
+                        case mysConsts.I.I_REBOOT:
+                        case mysConsts.I.I_GATEWAY_READY:
+                        case mysConsts.I.I_SIGNING_PRESENTATION:
                         case mysConsts.I.I_NONCE_REQUEST:
                         case mysConsts.I.I_NONCE_RESPONSE:
+                        case mysConsts.I.I_PRESENTATION:
+                        case mysConsts.I.I_LOCKED:
+                        case mysConsts.I.I_PING:
+                        case mysConsts.I.I_PONG:
                         case mysConsts.I.I_HEARTBEAT_REQUEST:
                         case mysConsts.I.I_DISCOVER_REQUEST:
                         case mysConsts.I.I_DISCOVER_RESPONSE:
@@ -380,42 +529,51 @@ export class mySensorsClass {
                         case mysConsts.I.I_POST_SLEEP_NOTIFICATION:
                             exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring unexpected internal message', msg );
                             break;
-
-                        case mysConsts.I.I_INCLUSION_MODE:
-                        case mysConsts.I.I_CONFIG:
-
-                        case mysConsts.I.I_LOG_MESSAGE:
-                        case mysConsts.I.I_CHILDREN:
-                        case mysConsts.I.I_SKETCH_NAME:
-                        case mysConsts.I.I_SKETCH_VERSION:
-                        case mysConsts.I.I_REBOOT:
-                        case mysConsts.I.I_GATEWAY_READY:
-                        case mysConsts.I.I_SIGNING_PRESENTATION:
-                        case mysConsts.I.I_PRESENTATION:
-                        case mysConsts.I.I_LOCKED:
-                        case mysConsts.I.I_PING:
-                        case mysConsts.I.I_PONG:
-                        case mysConsts.I.I_DEBUG:
+                        default:
+                            exports.Msg.error( 'mySensorsClass.incomingMessage() unknown type', msg );
+                            break;
                     }
                     break;
                 case mysConsts.C.C_STREAM:
                     exports.Msg.info( 'mySensorsClass.incomingMessage() unexpected command (not the right sens for an OTA firmware update)', msg );
+                    break;
+                default:
+                    exports.Msg.error( 'mySensorsClass.incomingMessage() unknown command', msg );
                     break;
             }
         }
     }
 
     /**
+     * send a message to device
+     * @param {mysMessage} msg
+     */
+    mqttPublish( msg ){
+        const exports = this.IFeatureProvider.api().exports();
+        let _topic = this._mqttPublishTopic;
+        _topic += msg.node_id + '/' + msg.sensor_id + '/' + msg.command + '/' + msg.ack + '/' + msg.type;
+        exports.Msg.debug( 'mySensorsClass.mqttPublish()', _topic, msg );
+        this._mqttConnection.publish( _topic, msg.payload );
+    }
+
+    /**
      * A message has been received from a device through the MQTT message bus
      * @param {String} topic 
-     * @param {String payload 
+     * @param {String payload (may be empty)
      */
     mqttReceived( topic, payload ){
         const exports = this.IFeatureProvider.api().exports();
-        exports.Msg.debug( 'mySensorsClass.mqttReceived()', 'topic='+topic, 'payload='+payload );
-        // if we are here, we are sure we have a 'subscribedTopic'
-        const _strmsg = topic.substring( this._subscribedTopic.length-1 ).replace( /\//g, ';' )+';'+JSON.parse( payload );
-        exports.Msg.debug( 'mySensorsClass.mqttReceived()', '_strmsg='+_strmsg );
+        exports.Msg.debug( 'mySensorsClass.mqttReceived()', 'topic='+topic );
+        //exports.Msg.debug( 'mySensorsClass.mqttReceived()', 'topic='+topic, 'payload='+payload );
+        // payload may be empty and cannot be JSON.parse'd
+        let _strmsg = topic.substring( this._mqttSubscribedTopic.length-1 ).replace( /\//g, ';' )+';';
+        try {
+            _strmsg += JSON.parse( payload || "" );
+        } catch( e ){
+            exports.Msg.info( 'mySensorsClass.mqttReceived()', 'error when parsing payload=\''+payload+'\', making it empty string' );
+            _strmsg += "";
+        }
+        //exports.Msg.debug( 'mySensorsClass.mqttReceived()', '_strmsg='+_strmsg );
         const _mysmsg = new mysMessage().incoming( this.IFeatureProvider, _strmsg );
         // what to do with this message now ?
         this.incomingMessage( _mysmsg );
@@ -424,34 +582,24 @@ export class mySensorsClass {
     /**
      * Subscribe to the topics to receive devices messages
      * The root topic to subscribe to is expected to be found in the configuration
+     * _mqttKey has been set at fillConfig() time
      */
     mqttSubscribe(){
         const exports = this.IFeatureProvider.api().exports();
         exports.Msg.debug( 'mySensorsClass.mqttSubscribe()' );
         const _config = this.IFeatureProvider.feature().config();
-        let _found = false;
-        const _clients = this.IMqttClient.getConnections();
-        Object.keys( _clients ).every(( key ) => {
-            const _conf = _config[key];
-            if( _conf && _conf.topics && _conf.topics.fromDevices ){
-                let _topic = _conf.topics.fromDevices;
-                let _last = _topic.charAt( _topic.length-1 );
-                if( _last !== '#' ){
-                    if( _last !== '/'){
-                        _topic += '/';
-                    }
-                    _topic += '#';
-                }
-                _found = true;
-                _clients[key].subscribe( _topic, this, this.mqttReceived );
-                this._subscribedTopic = _topic;
-                return false;
+        let _topic = _config[this._mqttKey].topics.fromDevices;
+        let _last = _topic.charAt( _topic.length-1 );
+        if( _last !== '#' ){
+            if( _last !== '/'){
+                _topic += '/';
             }
-            return true;
-        });
-        if( !_found ){
-            exports.Msg.warn( 'mySensorsClass.mqttSubscribe() configuration doesn\'t provide root topic to be subscribed to' );
+            _topic += '#';
         }
+        const _clients = this.IMqttClient.getConnections();
+        _clients[this._mqttKey].subscribe( _topic, this, this.mqttReceived );
+        this._mqttSubscribedTopic = _topic;
+        this._mqttConnection = _clients[this._mqttKey];
     }
 
     /**
@@ -494,6 +642,53 @@ export class mySensorsClass {
                 //console.log( 'coreController.publiableStatus() featureStatus', featureStatus );
                 return Promise.resolve( featureStatus );
             });
+    }
+
+    /**
+     * @param {String} command
+     *  GetNextId
+     * @param {mysMessage} msg
+     */
+    reqAnswerFromController( command, msg ){
+        const exports = this.IFeatureProvider.api().exports();
+        exports.Msg.debug( 'mySensorsClass.reqAnswerFromController() command='+command, msg );
+    }
+
+    /**
+     * @param {String} command
+     *  createDevice
+     *  requestValue
+     *  setBatteryLevel
+     *  setSketchName
+     *  setSketchVersion
+     *  setValue
+     * @param {mysMessage} msg
+     */
+    sendToController( command, msg ){
+        const exports = this.IFeatureProvider.api().exports();
+        exports.Msg.debug( 'mySensorsClass.sendToController() command='+command, msg );
+    }
+
+    /**
+     * @param {mysMessage} msg the received message to be answered to
+     * @param {*} payload the data to answer
+     */
+    sendToDevice( msg, payload ){
+        const exports = this.IFeatureProvider.api().exports();
+        exports.Msg.debug( 'mySensorsClass.sendToDevice()' );
+        let _answer = new mysMessage();
+        _answer.copy( msg );
+        _answer.sens = mysMessage.c.OUTGOING;
+        _answer.requestAck();
+        _answer.setPayload( payload );
+        switch( this.IFeatureProvider.feature().config().mySensors.type ){
+            case 'mqtt':
+                this.mqttPublish( _answer );
+                break;
+            case 'net':
+            case 'serial':
+                break;
+        }
     }
 
     /**
