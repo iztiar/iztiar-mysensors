@@ -1,0 +1,39 @@
+ Iztiar - TODO
+
+ Summary
+ =======
+
+   Todo
+   Done
+
+-------------------------------------------------------------------------------------------
+ Todo
+ ====
+
+   1 2022- 4- 3 implement sendToController (via the REST API) createDevice
+
+   2 2022- 4- 3 implement sendToController requestValue + answer to the device
+
+   3 2022- 4- 3 implement sendToController setBatteryLevel
+
+   4 2022- 4- 3 implement sendToController setSketchName
+
+   5 2022- 4- 3 implement sendToController setSketchVersion
+
+   6 2022- 4- 3 implement sendToController setValue
+
+   7 2022- 4- 3 implement reqAnswerFromController getNextId + asnwer to the device
+
+   8 2022- 4- 3 implement serial gateway
+
+   9 2022- 4- 3 implement net gateway
+
+  10
+
+-------------------------------------------------------------------------------------------
+ Done
+ ====
+
+-------------------------------------------------------------------------------------------
+ P. Wieser - Created on 2022, Apr. 3rd
+             Last updated on 2022, Apr. 3rd
