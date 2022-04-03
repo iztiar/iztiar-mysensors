@@ -72,6 +72,7 @@ export class mySensorsClass {
                 case 'inclusion':
                     if( _args1 === 'on' || _args1 === 'off' ){
                         self._inclusionMode = ( _args1 === 'on' );
+                        reply.answer = { inclusion: _args1 };
                     } else {
                         reply.answer = "mySensors 'inclusion' command expects one 'on|off' argument, '"+_args1+"' found";
                     }
