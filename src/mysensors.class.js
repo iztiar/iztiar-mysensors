@@ -104,8 +104,6 @@ export class mySensorsClass {
     // is inclusion mode
     _inclusionMode = false;
 
-
-
     /**
      * @param {engineApi} api the engine API as described in engine-api.schema.json
      * @param {featureCard} card a description of this feature
