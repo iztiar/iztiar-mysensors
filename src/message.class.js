@@ -78,7 +78,7 @@ export class mysMessage {
 
     /**
      * Initialize an incoming message
-     * @param {IFeatureProvider} provider
+     * @param {featureProvider} provider
      * @param {*} data the serial string semi-comma-separated message
      * @returns {mysMessage}
      * @throws {Error}

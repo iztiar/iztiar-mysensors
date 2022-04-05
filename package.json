@@ -1,6 +1,6 @@
 {
   "name": "@iztiar/iztiar-mysensors",
-  "version": "0.2.0",
+  "version": "0.8.0",
   "type": "module",
   "description": "Iztiar mySensors gateway",
   "keywords": [
@@ -35,6 +35,6 @@
   },
   "engines": {
     "node": ">12.x",
-    "@iztiar/iztiar-core": ">0.6"
+    "@iztiar/iztiar-core": ">=0.8"
   }
 }
