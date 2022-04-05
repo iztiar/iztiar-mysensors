@@ -1,6 +1,6 @@
 {
   "name": "@iztiar/iztiar-mysensors",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "type": "module",
   "description": "Iztiar mySensors gateway",
   "keywords": [
