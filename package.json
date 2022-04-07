@@ -26,6 +26,7 @@
     "url": "git+ssh://git@github.com/iztiar/iztiar-mysensors.git"
   },
   "dependencies": {
+    "axios": "^0.26.1",
     "serialport": "^10.4.0"
   },
   "peerDependencies": {},

@@ -68,10 +68,10 @@ export class mysMessage {
         this.node_id = msg.node_id;
         this.sensor_id = msg.sensor_id;
         this.command = msg.command;
-        this.command_str = mysMessage.commandStr( this.command );
+        this.command_str = msg.command_str;
         this.ack = msg.ack;
         this.type = msg.type;
-        this.type_str = this.setType();
+        this.type_str = msg.type_str;
         this.payload = msg.payload;
         this.sens = msg.sens;
     }
@@ -172,10 +172,15 @@ export class mysMessage {
     }
 
     /**
-     * setup the type of the message
+     * @param {String} type the type of the message to be set
+     * @param {featureProvider} provider
      */
-    setType(){
+    setType( type, provider=null ){
         let ref = null;
+        this.type = type;
+        if( provider ){
+            provider.api().exports().Msg.debug( 'mysMessage.setType() '+type );
+        }
         switch( this.command ){
             case mysConsts.C.C_PRESENTATION:
                 ref = mysConsts.S;
@@ -188,8 +193,15 @@ export class mysMessage {
                 ref = mysConsts.I;
                 break;
         }
+        if( provider ){
+            provider.api().exports().Msg.debug( 'mysMessage.setType() chosen ref is', ref );
+        }
         if( ref ){
             this.type_str = mysMessage.str( ref, this.type );
+            if( provider ){
+                provider.api().exports().Msg.debug( 'mysMessage.setType() type_str=', this.type_str );
+            }
         }
+        return this;
     }
 }

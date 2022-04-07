@@ -4,8 +4,7 @@
  * The class which implements the gateway to MySensors network and devices.
  * See mysensors.routes.js for the needed add-on to the REST API.
  */
-import { mysConsts } from './consts.js';
-import { mysMessage } from './imports.js';
+import { mysConsts, mysMessage, rest } from './imports.js';
 
 export class mySensorsClass {
 
@@ -326,64 +325,72 @@ export class mySensorsClass {
         const exports = this.api().exports();
         exports.Msg.debug( 'mySensorsClass.fillConfig()' );
         let _config = this.feature().config();
-        if( Object.keys( _config ).includes( 'ITcpServer' ) && !Object.keys( _config.ITcpServer ).includes( 'port' )){
-            _config.ITcpServer.port = mySensorsClass.d.listenPort;
-        }
-        if( !_config.mySensors ){
-            throw new Error( 'mySensorsClass expects a \'mySensors\' configuration group' );
-        }
-        if( _config.mySensors.type !== 'mqtt' && _config.mySensors.type !== 'net' && _config.mySensors.type !== 'serial' ){
-            throw new Error( 'mySensorsClass expects a \'mySensors.type\' gateway type, found \''+_config.mySensors.type+'\'' );
-        }
-        if( !_config.mySensors.config ){
-            _config.mySensors.config = mySensorsClass.d.config;
-        }
-        // depending of the mySensors gateway type, we must have an ad-hoc configuration group
-        let _found = false;
-        const _starts = 'IMqttClient.';
-        Object.keys( _config ).every(( k ) => {
-            switch( _config.mySensors.type ){
-                case 'mqtt':
-                    if( k.startsWith( _starts )){
-                        if( _config[k].topics && _config[k].topics.fromDevices && _config[k].topics.toDevices ){
-                            _found = true;
-                            this._mqttKey = k;
-                            this._mqttPublishTopic = _config[k].topics.toDevices;
-                            let _last = this._mqttPublishTopic.charAt( this._mqttPublishTopic.length-1 );
-                            if( _last !== '/' ){
-                                this._mqttPublishTopic += '/';
+            _promise = _promise
+            .then(() => {
+                if( !_config.class ){
+                    _config.class = this.constructor.name;
+                }
+                if( Object.keys( _config ).includes( 'ITcpServer' ) && !Object.keys( _config.ITcpServer ).includes( 'port' )){
+                    _config.ITcpServer.port = mySensorsClass.d.listenPort;
+                }
+                if( !_config.mySensors ){
+                    throw new Error( 'mySensorsClass expects a \'mySensors\' configuration group' );
+                }
+                if( _config.mySensors.type !== 'mqtt' && _config.mySensors.type !== 'net' && _config.mySensors.type !== 'serial' ){
+                    throw new Error( 'mySensorsClass expects a \'mySensors.type\' gateway type, found \''+_config.mySensors.type+'\'' );
+                }
+                if( !_config.mySensors.config ){
+                    _config.mySensors.config = mySensorsClass.d.config;
+                }
+            })
+            .then(() => {
+                // depending of the mySensors gateway type, we must have an ad-hoc configuration group
+                let _found = false;
+                const _starts = 'IMqttClient.';
+                Object.keys( _config ).every(( k ) => {
+                    switch( _config.mySensors.type ){
+                        case 'mqtt':
+                            if( k.startsWith( _starts )){
+                                if( _config[k].topics && _config[k].topics.fromDevices && _config[k].topics.toDevices ){
+                                    _found = true;
+                                    this._mqttKey = k;
+                                    this._mqttPublishTopic = _config[k].topics.toDevices;
+                                    let _last = this._mqttPublishTopic.charAt( this._mqttPublishTopic.length-1 );
+                                    if( _last !== '/' ){
+                                        this._mqttPublishTopic += '/';
+                                    }
+                                    return false;
+                                }
                             }
-                            return false;
-                        }
+                            break;
+                        case 'net':
+                            if( k === 'net' ){
+                                _found = true;
+                                if( !_config.net.host ){
+                                    _config.net.host = mySensorsClass.d.gwhost;
+                                }
+                                if( !_config.net.port ){
+                                    _config.net.port = mySensorsClass.d.gwport;
+                                }
+                                return false;
+                            }
+                            break;
+                        case 'serial':
+                            if( k === 'serial' ){
+                                _found = true;
+                                if( !_config.serial.port ){
+                                    _config.serial.port = mySensorsClass.d.gwusb;
+                                }
+                                return false;
+                            }
+                            break;
                     }
-                    break;
-                case 'net':
-                    if( k === 'net' ){
-                        _found = true;
-                        if( !_config.net.host ){
-                            _config.net.host = mySensorsClass.d.gwhost;
-                        }
-                        if( !_config.net.port ){
-                            _config.net.port = mySensorsClass.d.gwport;
-                        }
-                        return false;
-                    }
-                    break;
-                case 'serial':
-                    if( k === 'serial' ){
-                        _found = true;
-                        if( !_config.serial.port ){
-                            _config.serial.port = mySensorsClass.d.gwusb;
-                        }
-                        return false;
-                    }
-                    break;
-            }
-            return true;
-        });
-        if( !_found ){
-            throw new Error( 'mySensorsClass expects a configuration group for \''+_config.mySensors.type+'\' which was not found' );
-        }
+                    return true;
+                });
+                if( !_found ){
+                    throw new Error( 'mySensorsClass expects a configuration group for \''+_config.mySensors.type+'\' which was not found' );
+                }
+            });
         return _promise;
     }
 
@@ -403,7 +410,8 @@ export class mySensorsClass {
         } else {
             switch( msg.command ){
                 // presentation message are sent by the device on each boot of the device
-                //  this is a good time to register them in the controller application (as far as as we are in inclusion mode)
+                //  this is a good time to register them in the controller application (as far as we are in inclusion mode)
+                //  we buffer all these messages, sending the total to the controller when we thing we have all received
                 case mysConsts.C.C_PRESENTATION:
                     if( this._inclusionMode ){
                         this.sendToController( 'createDevice', msg );
@@ -428,14 +436,22 @@ export class mySensorsClass {
                             break;
                         // request a new Id from a controller, have to answer to the device
                         case mysConsts.I.I_ID_REQUEST:
-                            this.reqAnswerFromController( 'getNextId', msg );
+                            rest.request( this, 'getNextId', msg ).then(( res ) => {
+                                //exports.Msg.debug( 'mySensorsClass.incomingMessages() res='+res );
+                                if( res ){
+                                    msg.setType( mysConsts.I.I_ID_RESPONSE );
+                                    this.sendToDevice( msg, res );
+                                }
+                            });
                             break;
                         // to be answered by the gateway
                         case mysConsts.I.I_TIME:
                             this.sendToDevice( msg, Date.now());
                             break;
                         case mysConsts.I.I_VERSION:
-                            this.sendToDevice( msg, this.feature().packet().getVersion());
+                            // we may expect that the payload contains the node MySensors library version here ?
+                            //  but in no way it may be useful to answer with our own version whose the node doesn't care at all
+                            //this.sendToDevice( msg, this.feature().packet().getVersion());
                             break;
                         case mysConsts.I.I_CONFIG:
                             this.sendToDevice( msg, this.feature().config().mySensors.config );
@@ -623,17 +639,6 @@ export class mySensorsClass {
 
     /**
      * @param {String} command
-     *  GetNextId
-     * @param {mysMessage} msg
-     */
-    reqAnswerFromController( command, msg ){
-        const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.reqAnswerFromController() command='+command, msg );
-        this._counters.toController += 1;
-    }
-
-    /**
-     * @param {String} command
      *  createDevice
      *  requestValue
      *  setBatteryLevel
@@ -649,20 +654,18 @@ export class mySensorsClass {
     }
 
     /**
-     * @param {mysMessage} msg the received message to be answered to
+     * @param {mysMessage} msg the message to send
      * @param {*} payload the data to answer
      */
     sendToDevice( msg, payload ){
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.sendToDevice()' );
-        let _answer = new mysMessage();
-        _answer.copy( msg );
-        _answer.sens = mysMessage.c.OUTGOING;
-        _answer.requestAck();
-        _answer.setPayload( payload );
+        //exports.Msg.debug( 'mySensorsClass.sendToDevice(), msg=', msg );
+        msg.sens = mysMessage.c.OUTGOING;
+        msg.requestAck();
+        msg.setPayload( payload );
         switch( this.feature().config().mySensors.type ){
             case 'mqtt':
-                this.mqttPublish( _answer );
+                this.mqttPublish( msg );
                 break;
             case 'net':
             case 'serial':
