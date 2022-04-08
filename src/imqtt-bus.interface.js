@@ -32,6 +32,27 @@ export class IMqttBus {
         return this;
     }
 
+    /**
+     * A message has been received from a device through the MQTT message bus
+     * @param {String} topic 
+     * @param {String payload (may be empty)
+     */
+    _receive( topic, payload ){
+        const exports = this._instance.api().exports();
+        exports.Msg.debug( 'IMqttBus._receive()', 'topic='+topic );
+        //exports.Msg.debug( 'mySensors.mqttReceived()', 'topic='+topic, 'payload='+payload );
+        // payload may be empty and cannot be JSON.parse'd
+        let _strmsg = topic.substring( this._subscribedTopic.length-1 ).replace( /\//g, ';' )+';';
+        try {
+            _strmsg += JSON.parse( payload || "" );
+        } catch( e ){
+            exports.Msg.info( 'IMqttBus._receive()', 'error when parsing payload=\''+payload+'\', making it empty string' );
+            _strmsg += "";
+        }
+        //exports.Msg.debug( 'mySensors.mqttReceived()', '_strmsg='+_strmsg );
+        this.v_incomingMessage( new mysMessage().incoming( this._instance, _strmsg ));
+    }
+
     /* *** ***************************************************************************************
        *** The implementation API, i.e; the functions the implementation may want to implement ***
        *** *************************************************************************************** */
@@ -93,27 +114,6 @@ export class IMqttBus {
     }
 
     /**
-     * A message has been received from a device through the MQTT message bus
-     * @param {String} topic 
-     * @param {String payload (may be empty)
-     */
-    incomingMessages( topic, payload ){
-        const exports = this._instance.api().exports();
-        exports.Msg.debug( 'IMqttBus.incomingMessages()', 'topic='+topic );
-        //exports.Msg.debug( 'mySensors.mqttReceived()', 'topic='+topic, 'payload='+payload );
-        // payload may be empty and cannot be JSON.parse'd
-        let _strmsg = topic.substring( this._subscribedTopic.length-1 ).replace( /\//g, ';' )+';';
-        try {
-            _strmsg += JSON.parse( payload || "" );
-        } catch( e ){
-            exports.Msg.info( 'IMqttBus.incomingMessages()', 'error when parsing payload=\''+payload+'\', making it empty string' );
-            _strmsg += "";
-        }
-        //exports.Msg.debug( 'mySensors.mqttReceived()', '_strmsg='+_strmsg );
-        this.v_incomingMessage( new mysMessage().incoming( this._instance, _strmsg ));
-    }
-
-    /**
      * send a message to device
      * @param {mysMessage} msg
      */
@@ -129,12 +129,18 @@ export class IMqttBus {
      * Start to listen to messages
      * Subscribe to the topics to receive devices messages
      * The root topic to subscribe to is expected to be found in the configuration
-     * @param {featureProvider} provider 
      */
     start(){
         this._instance.api().exports().Msg.debug( 'IMqttBus.start()' );
         const _clients = this._instance.IMqttClient.getConnections();
         this._connection = _clients[this._key];
-        this._connection.subscribe( this._subscribedTopic, this, this.incomingMessages );
+        this._connection.subscribe( this._subscribedTopic, this, this._receive );
+    }
+
+    /**
+     * Terminate the connection
+     */
+    terminate(){
+        this._instance.api().exports().Msg.debug( 'IMqttBus.terminate()' );
     }
 }

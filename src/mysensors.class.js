@@ -4,7 +4,7 @@
  * The class which implements the gateway to MySensors network and devices.
  * See mysensors.routes.js for the needed add-on to the REST API.
  */
-import { IMqttBus, mysConsts, mysMessage, rest } from './imports.js';
+import { IMqttBus, INetBus, ISerialBus, mysConsts, mysMessage, rest } from './imports.js';
 
 export class mySensors {
 
@@ -13,9 +13,6 @@ export class mySensors {
      */
     static d = {
         listenPort: 24010,       // TCP port number for controller -> gateway comm
-        gwport: 24009,           // TCP port for net gateway -> devices
-        gwhost: 'localhost',
-        gwusb: '/dev/usb',
         config: 'M'
     };
 
@@ -161,6 +158,18 @@ export class mySensors {
                 });
                 _promise = _promise.then(() => { Interface.fillConfig( this, 'IMqttBus' ); });
             })
+            .then(() => {
+                Interface.add( this, INetBus, {
+                    v_incomingMessage: this.incomingMessage
+                });
+                _promise = _promise.then(() => { Interface.fillConfig( this, 'IMqttBus' ); });
+            })
+            .then(() => {
+                Interface.add( this, ISerialBus, {
+                    v_incomingMessage: this.incomingMessage
+                });
+                _promise = _promise.then(() => { Interface.fillConfig( this, 'IMqttBus' ); });
+            })
             .then(() => { return Promise.resolve( this ); });
 
         return _promise;
@@ -192,10 +201,10 @@ export class mySensors {
                             this.IMqttBus.start();
                             break;
                         case 'net':
-                            exports.Msg.debug( 'mySensors.iforkableStart()', 'type \'net\' not implemented' );
+                            this.INetBus.start();
                             break;
                         case 'serial':
-                            exports.Msg.debug( 'mySensors.iforkableStart()', 'type \'serial\' not implemented' );
+                            this.ISerialBus.start();
                             break;
                     }
                 })
@@ -342,42 +351,6 @@ export class mySensors {
                     _config.mySensors.config = mySensors.d.config;
                 }
             });
-                /*
-            .then(() => {
-                // depending of the mySensors gateway type, we must have an ad-hoc configuration group
-                let _found = false;
-                const _starts = 'IMqttClient.';
-                Object.keys( _config ).every(( k ) => {
-                    switch( _config.mySensors.type ){
-                        case 'net':
-                            if( k === 'net' ){
-                                _found = true;
-                                if( !_config.net.host ){
-                                    _config.net.host = mySensors.d.gwhost;
-                                }
-                                if( !_config.net.port ){
-                                    _config.net.port = mySensors.d.gwport;
-                                }
-                                return false;
-                            }
-                            break;
-                        case 'serial':
-                            if( k === 'serial' ){
-                                _found = true;
-                                if( !_config.serial.port ){
-                                    _config.serial.port = mySensors.d.gwusb;
-                                }
-                                return false;
-                            }
-                            break;
-                    }
-                    return true;
-                if( !_found ){
-                    throw new Error( 'mySensors expects a configuration group for \''+_config.mySensors.type+'\' which was not found' );
-                }
-                });
-            });
-                */
         return _promise;
     }
 
@@ -593,7 +566,10 @@ export class mySensors {
                 this.IMqttBus.send( msg );
                 break;
             case 'net':
+                this.INetBus.send( msg );
+                break;
             case 'serial':
+                this.ISerialBus.send( msg );
                 break;
         }
         this._counters.toDevices += 1;
@@ -631,6 +607,9 @@ export class mySensors {
                 return self.ITcpServer.terminate();
             })
             .then(() => { return self.IMqttClient.terminate(); })
+            .then(() => { return self.IMqttBus.terminate(); })
+            .then(() => { return self.INetBus.terminate(); })
+            .then(() => { return self.ISerialBus.terminate(); })
             .then(() => {
                 // we auto-remove from runfile as late as possible
                 //  (rationale: no more runfile implies that the service is no more testable and expected to be startable)
