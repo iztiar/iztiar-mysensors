@@ -46,26 +46,28 @@
                 "patternProperties" : {
                     "^IMqttClient\\.[a-zA-Z][a-zA-Z0-9-_]*$": {
                         "type": "object",
-                        "description": "the configuration group to handle the MQTT devices connection",
-                        "properties": {
-                            "topics": {
-                                "type": "object",
-                                "description": "the topics to publish/subscribe to",
-                                "properties": {
-                                    "fromDevices": {
-                                        "type": "string",
-                                        "description": "the root topic to be subscribed to receive messages sent by the devices"
-                                    },
-                                    "toDevices": {
-                                        "type": "string",
-                                        "description": "the root topic to be used when publishing to the devices"
-                                    }
-                                }
-                            }
+                        "description": "the configuration group to handle the MQTT devices connection"
+                    }
+                },
+                "IMqttBus" : {
+                    "type": "object",
+                    "description": "the configuration group to handle the MQTT devices connection",
+                    "properties": {
+                        "IMqttClient": {
+                            "type": "string",
+                            "description": "the IMqttClient group which describes the IMqttBUs connection"
+                        },
+                        "fromDevices": {
+                            "type": "string",
+                            "description": "the root topic to be subscribed to receive messages sent by the devices"
+                        },
+                        "toDevices": {
+                            "type": "string",
+                            "description": "the root topic to be used when publishing to the devices"
                         }
                     }
                 },
-                "net": {
+                "INetBus": {
                     "type": "object",
                     "description": "configuration of network gateway, used if and only if type='net'",
                     "properties": {
@@ -81,7 +83,7 @@
                         }
                     }
                 },
-                "serial": {
+                "ISerialBus": {
                     "type": "object",
                     "description": "configuration of serial gateway, used if and only if type='serial'",
                     "properties": {

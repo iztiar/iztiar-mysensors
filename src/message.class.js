@@ -29,15 +29,7 @@ export class mysMessage {
         OUTGOING: 'outgoing'    // from the controller to the device
     };
 
-    static commandStr( cmd ){
-        return mysMessage.str( mysConsts.C, cmd );
-    }
-
-    static typeStr( ref, type ){
-        return mysMessage.str( ref, type );
-    }
-
-    static str( ref, value ){
+    static _str( ref, value ){
         let _key = null;
         Object.keys( ref ).every(( k ) => {
             if( ref[k] === value ){
@@ -61,19 +53,21 @@ export class mysMessage {
     sens = null;
 
     /**
-     * @param {mysMessage} msg a message
-     * @returns {mysMessage} the input message has been copied here
+     * @param {mysMessage|null} msg a message
+     * @returns {mysMessage} a new mysMessage, maybe copied from  msg
      */
-    copy( msg ){
-        this.node_id = msg.node_id;
-        this.sensor_id = msg.sensor_id;
-        this.command = msg.command;
-        this.command_str = msg.command_str;
-        this.ack = msg.ack;
-        this.type = msg.type;
-        this.type_str = msg.type_str;
-        this.payload = msg.payload;
-        this.sens = msg.sens;
+    constructor( msg=null ){
+        if( msg ){
+            this.node_id = msg.node_id;
+            this.sensor_id = msg.sensor_id;
+            this.command = msg.command;
+            this.command_str = msg.command_str;
+            this.ack = msg.ack;
+            this.type = msg.type;
+            this.type_str = msg.type_str;
+            this.payload = msg.payload;
+            this.sens = msg.sens;
+        }
     }
 
     /**
@@ -107,7 +101,7 @@ export class mysMessage {
                     exports.Msg.error( 'mysMessage: command=\''+this.command+'\': invalid value' );
                     errs += 1;
                 } else {
-                    this.command_str = mysMessage.commandStr( this.command );
+                    this.command_str = mysMessage._str( mysConsts.C, this.command );
                 }
                 this.ack = strs[3];
                 if( this.ack !== '0' && this.ack !== '1' ){
@@ -133,7 +127,7 @@ export class mysMessage {
                         exports.Msg.error( 'mysMessage: type=\''+this.type+'\': invalid value' );
                         errs += 1;
                     } else {
-                        this.type_str = mysMessage.typeStr( ref, this.type );
+                        this.type_str = mysMessage._str( ref, this.type );
                     }
                 }
                 this.payload = strs[5];
@@ -197,7 +191,7 @@ export class mysMessage {
             provider.api().exports().Msg.debug( 'mysMessage.setType() chosen ref is', ref );
         }
         if( ref ){
-            this.type_str = mysMessage.str( ref, this.type );
+            this.type_str = mysMessage._str( ref, this.type );
             if( provider ){
                 provider.api().exports().Msg.debug( 'mysMessage.setType() type_str=', this.type_str );
             }

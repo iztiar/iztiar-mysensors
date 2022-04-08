@@ -1,12 +1,12 @@
 /*
- * mySensorsClass class
+ * mySensors class
  *
  * The class which implements the gateway to MySensors network and devices.
  * See mysensors.routes.js for the needed add-on to the REST API.
  */
-import { mysConsts, mysMessage, rest } from './imports.js';
+import { IMqttBus, mysConsts, mysMessage, rest } from './imports.js';
 
-export class mySensorsClass {
+export class mySensors {
 
     /**
      * Defaults
@@ -30,16 +30,16 @@ export class mySensorsClass {
     static verbs = {
         'iz.status': {
             label: 'return the status of this mySensors service',
-            fn: mySensorsClass._izStatus
+            fn: mySensors._izStatus
         },
         'iz.stop': {
             label: 'stop this mySensors service',
-            fn: mySensorsClass._izStop,
+            fn: mySensors._izStop,
             end: true
         },
         'mySensors': {
             label: 'mySensors command',
-            fn: mySensorsClass._mySensorsCmd
+            fn: mySensors._mySensorsCmd
         }
     };
 
@@ -56,7 +56,7 @@ export class mySensorsClass {
     static _izStop( self, reply ){
         self.terminate( reply.args, ( res ) => {
             reply.answer = res;
-            self.api().exports().Msg.debug( 'mySensorsClass.izStop()', 'replying with', reply );
+            self.api().exports().Msg.debug( 'mySensors.izStop()', 'replying with', reply );
             return Promise.resolve( reply );
         });
         return Promise.resolve( true );
@@ -92,13 +92,6 @@ export class mySensorsClass {
     // when this feature has started
     _started = null;
 
-    // mqtt data
-    // the subscribed-to topics when acting as a MQTT gateway (received messages from the devices)
-    _mqttSubscribedTopic = null;
-    _mqttKey = null;
-    _mqttConnection = null;
-    _mqttPublishTopic = null;
-
     // is inclusion mode
     _inclusionMode = false;
 
@@ -113,7 +106,7 @@ export class mySensorsClass {
     /**
      * @param {engineApi} api the engine API as described in engine-api.schema.json
      * @param {featureCard} card a description of this feature
-     * @returns {Promise} which resolves to a mySensorsClass instance
+     * @returns {Promise} which resolves to a mySensors instance
      */
     constructor( api, card ){
         const exports = api.exports();
@@ -122,7 +115,7 @@ export class mySensorsClass {
 
         // must derive from featureProvider
         Interface.extends( this, exports.featureProvider, api, card );
-        Msg.debug( 'mySensorsClass instanciation' );
+        Msg.debug( 'mySensors instanciation' );
 
         let _promise = this.fillConfig()
             .then(() => {
@@ -162,6 +155,12 @@ export class mySensorsClass {
                 });
                 _promise = _promise.then(() => { Interface.fillConfig( this, 'ITcpServer' ); });
             })
+            .then(() => {
+                Interface.add( this, IMqttBus, {
+                    v_incomingMessage: this.incomingMessage
+                });
+                _promise = _promise.then(() => { Interface.fillConfig( this, 'IMqttBus' ); });
+            })
             .then(() => { return Promise.resolve( this ); });
 
         return _promise;
@@ -179,24 +178,24 @@ export class mySensorsClass {
     iforkableStart( name, cb, args ){
         const exports = this.api().exports();
         const _forked = exports.IForkable.forkedProcess();
-        exports.Msg.debug( 'mySensorsClass.iforkableStart()', 'forkedProcess='+_forked );
+        exports.Msg.debug( 'mySensors.iforkableStart()', 'forkedProcess='+_forked );
         if( _forked ){
             const featCard = this.feature();
             return Promise.resolve( true )
                 .then(() => { this.ITcpServer.create( featCard.config().ITcpServer.port ); })
-                .then(() => { exports.Msg.debug( 'mySensorsClass.iforkableStart() tcpServer created' ); })
+                .then(() => { exports.Msg.debug( 'mySensors.iforkableStart() tcpServer created' ); })
                 .then(() => { this.IMqttClient.connects(); })
                 .then(() => { this._started = exports.utils.now(); })
                 .then(() => {
                     switch( featCard.config().mySensors.type ){
                         case 'mqtt':
-                            this.mqttSubscribe();
+                            this.IMqttBus.start();
                             break;
                         case 'net':
-                            exports.Msg.debug( 'mySensorsClass.iforkableStart()', 'type \'net\' not implemented' );
+                            exports.Msg.debug( 'mySensors.iforkableStart()', 'type \'net\' not implemented' );
                             break;
                         case 'serial':
-                            exports.Msg.debug( 'mySensorsClass.iforkableStart()', 'type \'serial\' not implemented' );
+                            exports.Msg.debug( 'mySensors.iforkableStart()', 'type \'serial\' not implemented' );
                             break;
                     }
                 })
@@ -213,10 +212,10 @@ export class mySensorsClass {
      */
     iforkableStatus(){
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.iforkableStatus()' );
+        exports.Msg.debug( 'mySensors.iforkableStatus()' );
         exports.utils.tcpRequest( this.feature().config().ITcpServer.port, 'iz.status' )
             .then(( answer ) => {
-                exports.Msg.debug( 'mySensorsClass.iforkableStatus()', 'receives answer to \'iz.status\'', answer );
+                exports.Msg.debug( 'mySensors.iforkableStatus()', 'receives answer to \'iz.status\'', answer );
             }, ( failure ) => {
                 // an error message is already sent by the called self.api().exports().utils.tcpRequest()
                 //  what more to do ??
@@ -230,10 +229,10 @@ export class mySensorsClass {
      */
     iforkableStop(){
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.iforkableStop()' );
+        exports.Msg.debug( 'mySensors.iforkableStop()' );
         exports.utils.tcpRequest( this.feature().config().ITcpServer.port, 'iz.stop' )
             .then(( answer ) => {
-                exports.Msg.debug( 'mySensorsClass.iforkableStop()', 'receives answer to \'iz.stop\'', answer );
+                exports.Msg.debug( 'mySensors.iforkableStop()', 'receives answer to \'iz.stop\'', answer );
             }, ( failure ) => {
                 // an error message is already sent by the called self.api().exports().utils.tcpRequest()
                 //  what more to do ??
@@ -258,7 +257,7 @@ export class mySensorsClass {
      * [-implementation Api-]
      */
     irunfileRunDir(){
-        this.api().exports().Msg.debug( 'mySensorsClass.irunfileRunDir()' );
+        this.api().exports().Msg.debug( 'mySensors.irunfileRunDir()' );
         return this.api().config().runDir();
     }
 
@@ -271,7 +270,7 @@ export class mySensorsClass {
      */
     itcpserverListening( tcpServerStatus ){
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.itcpserverListening()' );
+        exports.Msg.debug( 'mySensors.itcpserverListening()' );
         const featCard = this.feature();
         const _name = featCard.name();
         const _port = featCard.config().ITcpServer.port;
@@ -301,7 +300,7 @@ export class mySensorsClass {
      */
     checkableStatus(){
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.checkableStatus()' );
+        exports.Msg.debug( 'mySensors.checkableStatus()' );
         const _name = this.feature().name();
         const _json = this.IRunFile.jsonByName( _name );
         let o = new exports.Checkable();
@@ -323,7 +322,7 @@ export class mySensorsClass {
     fillConfig(){
         let _promise = super.fillConfig();
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.fillConfig()' );
+        exports.Msg.debug( 'mySensors.fillConfig()' );
         let _config = this.feature().config();
             _promise = _promise
             .then(() => {
@@ -331,46 +330,33 @@ export class mySensorsClass {
                     _config.class = this.constructor.name;
                 }
                 if( Object.keys( _config ).includes( 'ITcpServer' ) && !Object.keys( _config.ITcpServer ).includes( 'port' )){
-                    _config.ITcpServer.port = mySensorsClass.d.listenPort;
+                    _config.ITcpServer.port = mySensors.d.listenPort;
                 }
                 if( !_config.mySensors ){
-                    throw new Error( 'mySensorsClass expects a \'mySensors\' configuration group' );
+                    throw new Error( 'mySensors expects a \'mySensors\' configuration group' );
                 }
                 if( _config.mySensors.type !== 'mqtt' && _config.mySensors.type !== 'net' && _config.mySensors.type !== 'serial' ){
-                    throw new Error( 'mySensorsClass expects a \'mySensors.type\' gateway type, found \''+_config.mySensors.type+'\'' );
+                    throw new Error( 'mySensors expects a \'mySensors.type\' gateway type, found \''+_config.mySensors.type+'\'' );
                 }
                 if( !_config.mySensors.config ){
-                    _config.mySensors.config = mySensorsClass.d.config;
+                    _config.mySensors.config = mySensors.d.config;
                 }
-            })
+            });
+                /*
             .then(() => {
                 // depending of the mySensors gateway type, we must have an ad-hoc configuration group
                 let _found = false;
                 const _starts = 'IMqttClient.';
                 Object.keys( _config ).every(( k ) => {
                     switch( _config.mySensors.type ){
-                        case 'mqtt':
-                            if( k.startsWith( _starts )){
-                                if( _config[k].topics && _config[k].topics.fromDevices && _config[k].topics.toDevices ){
-                                    _found = true;
-                                    this._mqttKey = k;
-                                    this._mqttPublishTopic = _config[k].topics.toDevices;
-                                    let _last = this._mqttPublishTopic.charAt( this._mqttPublishTopic.length-1 );
-                                    if( _last !== '/' ){
-                                        this._mqttPublishTopic += '/';
-                                    }
-                                    return false;
-                                }
-                            }
-                            break;
                         case 'net':
                             if( k === 'net' ){
                                 _found = true;
                                 if( !_config.net.host ){
-                                    _config.net.host = mySensorsClass.d.gwhost;
+                                    _config.net.host = mySensors.d.gwhost;
                                 }
                                 if( !_config.net.port ){
-                                    _config.net.port = mySensorsClass.d.gwport;
+                                    _config.net.port = mySensors.d.gwport;
                                 }
                                 return false;
                             }
@@ -379,18 +365,19 @@ export class mySensorsClass {
                             if( k === 'serial' ){
                                 _found = true;
                                 if( !_config.serial.port ){
-                                    _config.serial.port = mySensorsClass.d.gwusb;
+                                    _config.serial.port = mySensors.d.gwusb;
                                 }
                                 return false;
                             }
                             break;
                     }
                     return true;
-                });
                 if( !_found ){
-                    throw new Error( 'mySensorsClass expects a configuration group for \''+_config.mySensors.type+'\' which was not found' );
+                    throw new Error( 'mySensors expects a configuration group for \''+_config.mySensors.type+'\' which was not found' );
                 }
+                });
             });
+                */
         return _promise;
     }
 
@@ -404,9 +391,9 @@ export class mySensorsClass {
     incomingMessage( msg ){
         this._counters.fromDevices += 1;
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.incomingMessages()', msg );
+        exports.Msg.debug( 'mySensors.incomingMessages()', msg );
         if( msg.isIncomingAck()){
-            exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring incoming ack message', msg );
+            exports.Msg.info( 'mySensors.incomingMessage() ignoring incoming ack message', msg );
         } else {
             switch( msg.command ){
                 // presentation message are sent by the device on each boot of the device
@@ -416,7 +403,7 @@ export class mySensorsClass {
                     if( this._inclusionMode ){
                         this.sendToController( 'createDevice', msg );
                     } else {
-                        exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
+                        exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
                     }
                     break;
                 case mysConsts.C.C_SET:
@@ -437,7 +424,7 @@ export class mySensorsClass {
                         // request a new Id from a controller, have to answer to the device
                         case mysConsts.I.I_ID_REQUEST:
                             rest.request( this, 'getNextId', msg ).then(( res ) => {
-                                //exports.Msg.debug( 'mySensorsClass.incomingMessages() res='+res );
+                                //exports.Msg.debug( 'mySensors.incomingMessages() res='+res );
                                 if( res ){
                                     msg.setType( mysConsts.I.I_ID_RESPONSE );
                                     this.sendToDevice( msg, res );
@@ -448,16 +435,11 @@ export class mySensorsClass {
                         case mysConsts.I.I_TIME:
                             this.sendToDevice( msg, Date.now());
                             break;
-                        case mysConsts.I.I_VERSION:
-                            // we may expect that the payload contains the node MySensors library version here ?
-                            //  but in no way it may be useful to answer with our own version whose the node doesn't care at all
-                            //this.sendToDevice( msg, this.feature().packet().getVersion());
-                            break;
                         case mysConsts.I.I_CONFIG:
                             this.sendToDevice( msg, this.feature().config().mySensors.config );
                             break;
                         case mysConsts.I.I_LOG_MESSAGE:
-                            exports.Logger.info( 'mySensorsClass.incomingMessage()', msg );
+                            exports.Logger.info( 'mySensors.incomingMessage()', msg );
                             break;
                         case mysConsts.I.I_SKETCH_NAME:
                             this.sendToController( 'setSketchName', msg );
@@ -466,9 +448,10 @@ export class mySensorsClass {
                             this.sendToController( 'setSketchVersion', msg );
                             break;
                         case mysConsts.I.I_DEBUG:
-                            exports.Logger.debug( 'mySensorsClass.incomingMessage()', msg );
+                            exports.Logger.debug( 'mySensors.incomingMessage()', msg );
                             break;
-                        // these messages should never be incoming or are just ignored
+                        // these messages should never be incoming from the devices or are just ignored
+                        case mysConsts.I.I_VERSION:
                         case mysConsts.I.I_INCLUSION_MODE:
                         case mysConsts.I.I_ID_RESPONSE:
                         case mysConsts.I.I_FIND_PARENT:
@@ -494,79 +477,21 @@ export class mySensorsClass {
                         case mysConsts.I.I_SIGNAL_REPORT_RESPONSE:
                         case mysConsts.I.I_PRE_SLEEP_NOTIFICATION:
                         case mysConsts.I.I_POST_SLEEP_NOTIFICATION:
-                            exports.Msg.info( 'mySensorsClass.incomingMessage() ignoring unexpected internal message', msg );
+                            exports.Msg.info( 'mySensors.incomingMessage() ignoring unexpected internal message', msg );
                             break;
                         default:
-                            exports.Msg.error( 'mySensorsClass.incomingMessage() unknown type', msg );
+                            exports.Msg.error( 'mySensors.incomingMessage() unknown type', msg );
                             break;
                     }
                     break;
                 case mysConsts.C.C_STREAM:
-                    exports.Msg.info( 'mySensorsClass.incomingMessage() unexpected command (not the right sens for an OTA firmware update)', msg );
+                    exports.Msg.info( 'mySensors.incomingMessage() unexpected command (not the right sens for an OTA firmware update)', msg );
                     break;
                 default:
-                    exports.Msg.error( 'mySensorsClass.incomingMessage() unknown command', msg );
+                    exports.Msg.error( 'mySensors.incomingMessage() unknown command', msg );
                     break;
             }
         }
-    }
-
-    /**
-     * send a message to device
-     * @param {mysMessage} msg
-     */
-    mqttPublish( msg ){
-        const exports = this.api().exports();
-        let _topic = this._mqttPublishTopic;
-        _topic += msg.node_id + '/' + msg.sensor_id + '/' + msg.command + '/' + msg.ack + '/' + msg.type;
-        exports.Msg.debug( 'mySensorsClass.mqttPublish()', _topic, msg );
-        this._mqttConnection.publish( _topic, msg.payload );
-    }
-
-    /**
-     * A message has been received from a device through the MQTT message bus
-     * @param {String} topic 
-     * @param {String payload (may be empty)
-     */
-    mqttReceived( topic, payload ){
-        const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.mqttReceived()', 'topic='+topic );
-        //exports.Msg.debug( 'mySensorsClass.mqttReceived()', 'topic='+topic, 'payload='+payload );
-        // payload may be empty and cannot be JSON.parse'd
-        let _strmsg = topic.substring( this._mqttSubscribedTopic.length-1 ).replace( /\//g, ';' )+';';
-        try {
-            _strmsg += JSON.parse( payload || "" );
-        } catch( e ){
-            exports.Msg.info( 'mySensorsClass.mqttReceived()', 'error when parsing payload=\''+payload+'\', making it empty string' );
-            _strmsg += "";
-        }
-        //exports.Msg.debug( 'mySensorsClass.mqttReceived()', '_strmsg='+_strmsg );
-        const _mysmsg = new mysMessage().incoming( this, _strmsg );
-        // what to do with this message now ?
-        this.incomingMessage( _mysmsg );
-    }
-
-    /**
-     * Subscribe to the topics to receive devices messages
-     * The root topic to subscribe to is expected to be found in the configuration
-     * _mqttKey has been set at fillConfig() time
-     */
-    mqttSubscribe(){
-        const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.mqttSubscribe()' );
-        const _config = this.feature().config();
-        let _topic = _config[this._mqttKey].topics.fromDevices;
-        let _last = _topic.charAt( _topic.length-1 );
-        if( _last !== '#' ){
-            if( _last !== '/'){
-                _topic += '/';
-            }
-            _topic += '#';
-        }
-        const _clients = this.IMqttClient.getConnections();
-        _clients[this._mqttKey].subscribe( _topic, this, this.mqttReceived );
-        this._mqttSubscribedTopic = _topic;
-        this._mqttConnection = _clients[this._mqttKey];
     }
 
     /*
@@ -574,7 +499,7 @@ export class mySensorsClass {
      */
     postStop(){
         super.postStop();
-        this.api().exports().Msg.debug( 'mySensorsClass.postStop()' );
+        this.api().exports().Msg.debug( 'mySensors.postStop()' );
         this.IRunFile.remove( this.feature().name());
     }
 
@@ -589,7 +514,7 @@ export class mySensorsClass {
         const exports = this.api().exports();
         const featCard = this.feature();
         const _serviceName = featCard.name();
-        exports.Msg.debug( 'mySensorsClass.publiableStatus()', 'serviceName='+_serviceName );
+        exports.Msg.debug( 'mySensors.publiableStatus()', 'serviceName='+_serviceName );
         const self = this;
         let status = {};
         // run-status.schema.json (a bit extended here)
@@ -604,7 +529,7 @@ export class mySensorsClass {
                     started: self._started,
                     messages: self._counters
                 };
-                exports.Msg.debug( 'mySensorsClass.publiableStatus()', 'runStatus', o );
+                exports.Msg.debug( 'mySensors.publiableStatus()', 'runStatus', o );
                 status = { ...status, ...o };
                 resolve( status );
             });
@@ -628,10 +553,10 @@ export class mySensorsClass {
     ready(){
         super.ready();
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.ready()' );
+        exports.Msg.debug( 'mySensors.ready()' );
         const self = this;
-        Object.keys( mySensorsClass.verbs ).every(( key ) => {
-            const o = mySensorsClass.verbs[key];
+        Object.keys( mySensors.verbs ).every(( key ) => {
+            const o = mySensors.verbs[key];
             self.ITcpServer.add( key, o.label, o.fn, o.end ? o.end : false );
             return true;
         });
@@ -649,7 +574,7 @@ export class mySensorsClass {
      */
     sendToController( command, msg ){
         const exports = this.api().exports();
-        exports.Msg.debug( 'mySensorsClass.sendToController() command='+command, msg );
+        exports.Msg.debug( 'mySensors.sendToController() command='+command, msg );
         this._counters.toController += 1;
     }
 
@@ -659,13 +584,13 @@ export class mySensorsClass {
      */
     sendToDevice( msg, payload ){
         const exports = this.api().exports();
-        //exports.Msg.debug( 'mySensorsClass.sendToDevice(), msg=', msg );
+        //exports.Msg.debug( 'mySensors.sendToDevice(), msg=', msg );
         msg.sens = mysMessage.c.OUTGOING;
         msg.requestAck();
         msg.setPayload( payload );
         switch( this.feature().config().mySensors.type ){
             case 'mqtt':
-                this.mqttPublish( msg );
+                this.IMqttBus.send( msg );
                 break;
             case 'net':
             case 'serial':
@@ -689,7 +614,7 @@ export class mySensorsClass {
     terminate( words=[], cb=null ){
         const exports = this.api().exports();
         const featCard = this.feature();
-        exports.Msg.debug( 'mySensorsClass.terminate()' );
+        exports.Msg.debug( 'mySensors.terminate()' );
 
         const _name = featCard.name();
         const _module = featCard.module();
@@ -710,7 +635,7 @@ export class mySensorsClass {
                 // we auto-remove from runfile as late as possible
                 //  (rationale: no more runfile implies that the service is no more testable and expected to be startable)
                 self.IRunFile.remove( _name );
-                exports.Msg.info( _name+' mySensorsClass terminating with code '+process.exitCode );
+                exports.Msg.info( _name+' mySensors terminating with code '+process.exitCode );
                 return Promise.resolve( true)
                 //process.exit();
             });

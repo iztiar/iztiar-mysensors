@@ -19,7 +19,7 @@ export const rest = {
     },
 
     /**
-     * @param {mySensorsClass} instance
+     * @param {mySensors} instance
      * @param {String} command
      *  GetNextId
      * @param {mysMessage} msg
@@ -27,7 +27,7 @@ export const rest = {
      */
     request: function( instance, command, msg ){
         const exports = instance.api().exports();
-        exports.Msg.debug( 'mySensorsClass.rest.request() command='+command, msg );
+        exports.Msg.debug( 'mySensors.rest.request() command='+command, msg );
         instance._counters.toController += 1;
         let _promise = Promise.resolve( null );
         return axios({

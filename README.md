@@ -6,7 +6,7 @@ ___iztiar-mysensors___ module provides a MySensors gateway to the Iztiar family.
 
     - `mysensors.class.js`: a service feature which acts as the link between MySensors devices and Iztiar
 
-        `mysensors.class.js` provides a mySensorsClass class which embeds:
+        `mysensors.class.js` provides a mySensors class which embeds:
 
         - a device reader from USB port or MQTT bus or network host:port
         - a Iztiar reader through a ITcpServer
