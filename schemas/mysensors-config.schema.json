@@ -93,6 +93,16 @@
                             "default": "/dev/usb"
                         }
                     }
+                },
+                "REST": {
+                    "type": "object",
+                    "description": "the characteristics of the to-be-addressed REST API server",
+                    "properties": {
+                        "feature": {
+                            "type": "string",
+                            "description": "the name of the feature which provides the REST API server"
+                        }
+                    }
                 }
             }
         }

@@ -4,6 +4,9 @@
  * The class which implements the gateway to MySensors network and devices.
  * See mysensors.routes.js for the needed add-on to the REST API.
  */
+import fs from 'fs';
+import path from 'path';
+
 import { IMqttBus, INetBus, ISerialBus, mysConsts, mysMessage, rest } from './imports.js';
 
 export class mySensors {
@@ -100,6 +103,11 @@ export class mySensors {
         toController: 0
     };
 
+    // REST client
+    _caCert = null;
+    _restCert = null;
+    _restKey = null;
+
     /**
      * @param {engineApi} api the engine API as described in engine-api.schema.json
      * @param {featureCard} card a description of this feature
@@ -172,6 +180,34 @@ export class mySensors {
             })
             .then(() => { return Promise.resolve( this ); });
 
+        return _promise;
+    }
+
+    // try to build the base URL to address the REST API server
+    // @param {Object} conf this feature configuration
+    // @returns {Promise} which resolves to provided conf
+    _fillConfigRestUrl( conf ){
+        const featApi = this.api();
+        const exports = featApi.exports();
+        let _promise = Promise.resolve( conf );
+        // only addressable by feature at the moment
+        //  see also core/MqttConnect class for other addressing modes
+        if( conf.REST && conf.REST.feature ){
+            let _featConfig = this.getConfig( conf.REST.feature, 'REST' );
+            if( _featConfig ){
+                conf.REST.baseUrl = 'https://'+_featConfig.host+':'+_featConfig.port+_featConfig.urlPrefix;
+            } else {
+                _promise = featApi.pluginManager().getConfig( featApi, conf.REST.feature, 'REST' )
+                .then(( _featConfig ) => {
+                    if( _featConfig ){
+                        conf.REST.baseUrl = 'https://'+_featConfig.host+':'+_featConfig.port;
+                    } else {
+                        exports.Msg.warn( 'mySensors._fillConfigRestUrl() feature='+conf.REST.feature+' config resolves to null' );
+                    }
+                    return Promise.resolve( conf );
+                });
+            }
+        }
         return _promise;
     }
 
@@ -350,8 +386,27 @@ export class mySensors {
                 if( !_config.mySensors.config ){
                     _config.mySensors.config = mySensors.d.config;
                 }
-            });
+            })
+            .then(() => { return this._fillConfigRestUrl( _config ); })
+            .then(() => {
+                if( _config.REST && _config.REST.cert && _config.REST.key ){
+                    this._caCert = fs.readFileSync( path.join( this.api().storageDir(), this.api().config().core().rootCA ));
+                    this._restCert = fs.readFileSync( path.join( this.api().storageDir(), _config.REST.cert ));
+                    this._restKey = fs.readFileSync( path.join( this.api().storageDir(), _config.REST.key ));
+                }
+            })
         return _promise;
+    }
+
+    /**
+     * @returns {Object} whch contains the client key and cert
+     */
+    getCerts(){
+        return {
+            ca: this._caCert,
+            cert: this._restCert,
+            key: this._restKey
+        }
     }
 
     /**
@@ -396,11 +451,11 @@ export class mySensors {
                             break;
                         // request a new Id from a controller, have to answer to the device
                         case mysConsts.I.I_ID_REQUEST:
-                            rest.request( this, 'getNextId', msg ).then(( res ) => {
+                            rest.request( this, 'GET', '/v1/counter/mySensors/next' ).then(( res ) => {
                                 //exports.Msg.debug( 'mySensors.incomingMessages() res='+res );
                                 if( res ){
                                     msg.setType( mysConsts.I.I_ID_RESPONSE );
-                                    this.sendToDevice( msg, res );
+                                    this.sendToDevice( msg, res.lastId );
                                 }
                             });
                             break;
@@ -546,9 +601,17 @@ export class mySensors {
      * @param {mysMessage} msg
      */
     sendToController( command, msg ){
-        const exports = this.api().exports();
-        exports.Msg.debug( 'mySensors.sendToController() command='+command, msg );
+        const Msg = this.api().exports().Msg;
+        Msg.debug( 'mySensors.sendToController() command='+command, msg );
         this._counters.toController += 1;
+        switch( command ){
+            case 'createDevice':
+                rest.put( this, '/v1/equipment/class/mySensors/'+msg.node_id, msg );
+                break;
+            default:
+                Msg.warn( 'mySensors.sendToController() unknown command='+command );
+                break;
+        }
     }
 
     /**
