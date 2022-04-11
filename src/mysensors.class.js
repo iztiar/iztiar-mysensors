@@ -97,6 +97,11 @@ export class mySensors {
     _inclusionMode = false;
     _inclusionTimeoutId = null;
 
+    // during inclusion mode, keep a cache of mySensors vs. controller data
+    //  index by mySensors/node_id
+    //  data name, equipId
+    _inclusionCache = null;
+
     // counters
     _counters = {
         fromDevices: 0,
@@ -415,6 +420,25 @@ export class mySensors {
     }
 
     /**
+     * @param {String} nodeid
+     * @param {Object} res the request
+     */
+    inclusionCacheAdd( nodeid, res ){
+        const Msg = this.api().exports().Msg;
+        if( Object.keys( this._inclusionCache ).includes( nodeid )){
+            Msg.debug( 'mySensorsClass.inclusionCacheAdd() nodeid='+nodeid+' already set' );
+
+        } else if( res.OK ){
+            const _data = { name: res.OK.name, equipId: res.OK.equipId };
+            this._inclusionCache[nodeid] = _data;
+            Msg.debug( 'mySensorsClass.inclusionCacheAdd() nodeid='+nodeid, _data );
+
+        } else {
+            Msg.error( 'mySensorsClass.inclusionCacheAdd() nodeid='+nodeid, 'res=', res );
+        }
+    }
+
+    /**
      * @param {mySensorsClass} instance
      * @param {Boolean} set whether to start (true) or stop the inclusion mode
      */
@@ -427,10 +451,12 @@ export class mySensors {
                 clearTimeout( instance._inclusionTimeoutId );
                 instance._inclusionTimeoutId = null;
             }
+            instance._inclusionCache = null;
         };
         _fClear();
         if( set ){
             instance._inclusionTimeoutId = setTimeout( instance.inclusionMode, instance.feature().config().mySensors.inclusionDelay, instance, false );
+            instance._inclusionCache = {};
         }
     }
 
@@ -454,15 +480,34 @@ export class mySensors {
                 //  we buffer all these messages, sending the total to the controller when we thing we have all received
                 case mysConsts.C.C_PRESENTATION:
                     if( this._inclusionMode ){
+                        // create/set the node
                         if( msg.sensor_id === '255' ){
                             rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
                                 mySensors: {
                                     nodeType: msg.type_str,
                                     libVersion: msg.payload
                                 }
-                            }).then(( res ) => { exports.Msg.debug( 'mySensors.incomingMessages() res=', res ); });
+                            }).then(( res ) => {
+                                exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
+                                this.inclusionCacheAdd( msg.node_id, res );
+                            });
+                            // create/set a command
+                        } else if( Object.keys( this._inclusionCache ).includes( msg.node_id )){
+                            const equip = this._inclusionCache[msg.node_id];
+                            let _payload = {
+                                mySensors: {
+                                    sensorType: msg.type_str
+                                }
+                            };
+                            if( msg.payload && msg.payload.length ){
+                                _payload.mySensors.sensorName = msg.payload;
+                            }
+                            rest.request( this, 'PUT', '/v1/command/equipment/'+equip.equipId+'/'+msg.sensor_id, _payload )
+                                .then(( res ) => {
+                                    exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
+                                });
                         } else {
-
+                            exports.Msg.info( 'mySensors.incomingMessage() ignoring sensor presentation message as node is unknown', msg );
                         }
                     } else {
                         exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
@@ -509,7 +554,10 @@ export class mySensors {
                                         mySensors: {
                                             sketchName: msg.payload
                                         }
-                                }).then(( res ) => { exports.Msg.debug( 'mySensors.incomingMessages() res=', res ); });
+                                }).then(( res ) => {
+                                    exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
+                                    this.inclusionCacheAdd( msg.node_id, res );
+                                });
                             } else {
                                 exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
                             }
@@ -520,7 +568,10 @@ export class mySensors {
                                         mySensors: {
                                             sketchVersion: msg.payload
                                         }
-                                }).then(( res ) => { exports.Msg.debug( 'mySensors.incomingMessages() res=', res ); });
+                                }).then(( res ) => {
+                                    exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
+                                    this.inclusionCacheAdd( msg.node_id, res );
+                                });
                             } else {
                                 exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
                             }

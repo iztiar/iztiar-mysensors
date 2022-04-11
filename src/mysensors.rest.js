@@ -21,8 +21,14 @@ export const rest = {
         let _options = {
             method: method,
             url: _baseUrl+url,
-            httpsAgent: new https.Agent( instance.getCerts())
+            httpsAgent: new https.Agent( instance.getCerts()),
+            headers: {
+                'Content-Type': 'application/json'
+            }
         };
+        if( data ){
+            _options.data = { ...data };
+        }
         return axios( _options )
             .then(( res ) => {
                 exports.Msg.verbose( 'mySensors.rest.request() res='+res.status+' '+res.statusText+' ,payload=', res.data );
