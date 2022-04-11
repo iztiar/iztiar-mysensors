@@ -40,6 +40,11 @@
                             "type": "string",
                             "description": "measures reference according to MySensors protocol (M)etric or (I)mperal",
                             "default": "M"
+                        },
+                        "inclusionDelay": {
+                            "type": "integer",
+                            "description": "inclusion mode timeout (default=5mn)",
+                            "default": 300000
                         }
                     }
                 },

@@ -15,8 +15,9 @@ export class mySensors {
      * Defaults
      */
     static d = {
-        listenPort: 24010,       // TCP port number for controller -> gateway comm
-        config: 'M'
+        listenPort: 24010,          // TCP port number for controller -> gateway comm
+        config: 'M',
+        inclusionDelay: 5*60*1000   // inclusion mode timeout 5mn
     };
 
     /**
@@ -72,7 +73,7 @@ export class mySensors {
                 // inclusion on|off
                 case 'inclusion':
                     if( _args1 === 'on' || _args1 === 'off' ){
-                        self._inclusionMode = ( _args1 === 'on' );
+                        self.inclusionMode( self, _args1 === 'on' );
                         reply.answer = { inclusion: _args1 };
                     } else {
                         reply.answer = "mySensors 'inclusion' command expects one 'on|off' argument, '"+_args1+"' found";
@@ -94,6 +95,7 @@ export class mySensors {
 
     // is inclusion mode
     _inclusionMode = false;
+    _inclusionTimeoutId = null;
 
     // counters
     _counters = {
@@ -386,6 +388,9 @@ export class mySensors {
                 if( !_config.mySensors.config ){
                     _config.mySensors.config = mySensors.d.config;
                 }
+                if( !_config.mySensors.inclusionDelay ){
+                    _config.mySensors.inclusionDelay = mySensors.d.inclusionDelay;
+                }
             })
             .then(() => { return this._fillConfigRestUrl( _config ); })
             .then(() => {
@@ -410,6 +415,26 @@ export class mySensors {
     }
 
     /**
+     * @param {mySensorsClass} instance
+     * @param {Boolean} set whether to start (true) or stop the inclusion mode
+     */
+    inclusionMode( instance, set ){
+        const Msg = instance.api().exports().Msg;
+        Msg.debug( 'mySensorsClass.inclusionMode() set='+set );
+        instance._inclusionMode = set;
+        const _fClear = function(){
+            if( instance._inclusionTimeoutId ){
+                clearTimeout( instance._inclusionTimeoutId );
+                instance._inclusionTimeoutId = null;
+            }
+        };
+        _fClear();
+        if( set ){
+            instance._inclusionTimeoutId = setTimeout( instance.inclusionMode, instance.feature().config().mySensors.inclusionDelay, instance, false );
+        }
+    }
+
+    /**
      * Deal with messages received from a device: what to do with it?
      *  - either ignore, leaving to the MySensors library the responsability to handle it
      *  - directly answer to the device from the gateway
@@ -429,7 +454,16 @@ export class mySensors {
                 //  we buffer all these messages, sending the total to the controller when we thing we have all received
                 case mysConsts.C.C_PRESENTATION:
                     if( this._inclusionMode ){
-                        this.sendToController( 'createDevice', msg );
+                        if( msg.sensor_id === '255' ){
+                            rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
+                                mySensors: {
+                                    nodeType: msg.type_str,
+                                    libVersion: msg.payload
+                                }
+                            }).then(( res ) => { exports.Msg.debug( 'mySensors.incomingMessages() res=', res ); });
+                        } else {
+
+                        }
                     } else {
                         exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
                     }
@@ -470,10 +504,26 @@ export class mySensors {
                             exports.Logger.info( 'mySensors.incomingMessage()', msg );
                             break;
                         case mysConsts.I.I_SKETCH_NAME:
-                            this.sendToController( 'setSketchName', msg );
+                            if( this._inclusionMode && msg.sensor_id === '255' ){
+                                rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
+                                        mySensors: {
+                                            sketchName: msg.payload
+                                        }
+                                }).then(( res ) => { exports.Msg.debug( 'mySensors.incomingMessages() res=', res ); });
+                            } else {
+                                exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
+                            }
                             break;
                         case mysConsts.I.I_SKETCH_VERSION:
-                            this.sendToController( 'setSketchVersion', msg );
+                            if( this._inclusionMode && msg.sensor_id === '255' ){
+                                rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
+                                        mySensors: {
+                                            sketchVersion: msg.payload
+                                        }
+                                }).then(( res ) => { exports.Msg.debug( 'mySensors.incomingMessages() res=', res ); });
+                            } else {
+                                exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
+                            }
                             break;
                         case mysConsts.I.I_DEBUG:
                             exports.Logger.debug( 'mySensors.incomingMessage()', msg );
@@ -508,7 +558,7 @@ export class mySensors {
                             exports.Msg.info( 'mySensors.incomingMessage() ignoring unexpected internal message', msg );
                             break;
                         default:
-                            exports.Msg.error( 'mySensors.incomingMessage() unknown type', msg );
+                            exports.Msg.error( 'mySensors.incomingMessage() ignoring unknown type', msg );
                             break;
                     }
                     break;

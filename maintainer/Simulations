@@ -101,8 +101,6 @@ mysCellar node startup
 
 3279,"mySensors.mqttReceived()","4":"topic=jeedomv4/mySensors/fromDevice/4/255/3/0/2"}
 3279,"mySensors.incomingMessages()","4":{"node_id":"4","sensor_id":"255","command":"3","command_str":"C_INTERNAL","ack":"0","type":"2","type_str":"I_VERSION","payload":"2.3.1-pwi","sens":"incoming"}}
-3280,"mySensors.sendToDevice()"}
-3280,"mySensors.mqttPublish()","4":"jeedomv4/mySensors/toDevice/4/255/3/1/2","5":{"node_id":"4","sensor_id":"255","command":"3","command_str":"C_INTERNAL","ack":"1","type":"2","payload":"0.2.0","sens":"outgoing"}}
 
 3790,"mySensors.mqttReceived()","4":"topic=jeedomv4/mySensors/fromDevice/4/10/1/0/15"}
 3791,"mySensors.incomingMessages()","4":{"node_id":"4","sensor_id":"10","command":"1","command_str":"C_SET","ack":"0","type":"15","type_str":"V_ARMED","payload":"1","sens":"incoming"}}
