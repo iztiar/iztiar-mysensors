@@ -45,6 +45,11 @@
                             "type": "integer",
                             "description": "inclusion mode timeout (default=5mn)",
                             "default": 300000
+                        },
+                        "inclusionAdvertise": {
+                            "type": "integer",
+                            "description": "inclusion advertising interval (default: every 5s)",
+                            "default": 5000
                         }
                     }
                 },

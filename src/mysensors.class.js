@@ -17,7 +17,8 @@ export class mySensors {
     static d = {
         listenPort: 24010,          // TCP port number for controller -> gateway comm
         config: 'M',
-        inclusionDelay: 5*60*1000   // inclusion mode timeout 5mn
+        inclusionDelay: 5*60*1000,  // inclusion mode timeout 5mn
+        inclusionAdvertise: 5000    // advertise every 1s
     };
 
     /**
@@ -70,11 +71,16 @@ export class mySensors {
             self._counters.fromController += 1;
             switch( reply.args[0] ){
 
-                // inclusion on|off
+                // inclusion on|off|null
                 case 'inclusion':
                     if( _args1 === 'on' || _args1 === 'off' ){
                         self.inclusionMode( self, _args1 === 'on' );
-                        reply.answer = { inclusion: _args1 };
+                    }
+                    const _delay = self.feature().config().mySensors.inclusionDelay;
+                    if( _args1 === 'off' || ( _args1 === null && !self._inclusionMode )){
+                        reply.answer = { inclusion: 'off', delay: _delay };
+                    } else if( _args1 === 'on' || ( _args1 === null && self._inclusionMode )){
+                        reply.answer = { inclusion: 'on', started: self._inclusionStarted, delay: _delay, now: Date.now() };
                     } else {
                         reply.answer = "mySensors 'inclusion' command expects one 'on|off' argument, '"+_args1+"' found";
                     }
@@ -93,8 +99,9 @@ export class mySensors {
     // when this feature has started
     _started = null;
 
-    // is inclusion mode
+    // inclusion mode
     _inclusionMode = false;
+    _inclusionStarted = null;
     _inclusionTimeoutId = null;
 
     // during inclusion mode, keep a cache of mySensors vs. controller data
@@ -449,6 +456,7 @@ export class mySensors {
         const _fClear = function(){
             if( instance._inclusionTimeoutId ){
                 clearTimeout( instance._inclusionTimeoutId );
+                instance._inclusionStarted = null;
                 instance._inclusionTimeoutId = null;
             }
             instance._inclusionCache = null;
@@ -457,6 +465,7 @@ export class mySensors {
         if( set ){
             instance._inclusionTimeoutId = setTimeout( instance.inclusionMode, instance.feature().config().mySensors.inclusionDelay, instance, false );
             instance._inclusionCache = {};
+            instance._inclusionStarted = Date.now();
         }
     }
 
