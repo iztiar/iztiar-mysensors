@@ -7,7 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { IMqttBus, INetBus, ISerialBus, mysConsts, mysMessage, rest } from './imports.js';
+import { IMqttBus, INetBus, ISerialBus, mysConsts, mysMessage, rest, mysTcp } from './imports.js';
 
 export class mySensors {
 
@@ -21,93 +21,8 @@ export class mySensors {
         inclusionAdvertise: 5000    // advertise every 1s
     };
 
-    /**
-     * The commands which can be received by this mySensors service via the TCP communication port
-     * - keys are the commands
-     *   > label {string} a short help message
-     *   > fn {Function} the execution function (cf. above)
-     *   > endConnection {Boolean} whether the server should close the client connection
-     *      alternative being to wait for the client closes itself its own connection
-     */
-    static verbs = {
-        'iz.status': {
-            label: 'return the status of this mySensors service',
-            fn: mySensors._izStatus
-        },
-        'iz.stop': {
-            label: 'stop this mySensors service',
-            fn: mySensors._izStop,
-            end: true
-        },
-        'mySensors': {
-            label: 'mySensors command',
-            fn: mySensors._mySensorsCmd
-        }
-    };
-
-    // returns the full status of the server
-    static _izStatus( self, reply ){
-        return self.publiableStatus()
-            .then(( status ) => {
-                reply.answer = status;
-                return Promise.resolve( reply );
-            });
-    }
-
-    // terminate the server and its relatives
-    static _izStop( self, reply ){
-        self.terminate( reply.args, ( res ) => {
-            reply.answer = res;
-            self.api().exports().Msg.debug( 'mySensors.izStop()', 'replying with', reply );
-            return Promise.resolve( reply );
-        });
-        return Promise.resolve( true );
-    }
-
-    // a 'mySensors' command received from the application
-    static _mySensorsCmd( self, reply ){
-        if( reply.args.length >= 1 ){
-            const _args1 = reply.args.length >= 2 ? reply.args[1] : null;
-            self._counters.fromController += 1;
-            switch( reply.args[0] ){
-
-                // inclusion on|off|null
-                case 'inclusion':
-                    if( _args1 === 'on' || _args1 === 'off' ){
-                        self.inclusionMode( self, _args1 === 'on' );
-                    }
-                    const _delay = self.feature().config().mySensors.inclusionDelay;
-                    if( _args1 === 'off' || ( _args1 === null && !self._inclusionMode )){
-                        reply.answer = { inclusion: 'off', delay: _delay };
-                    } else if( _args1 === 'on' || ( _args1 === null && self._inclusionMode )){
-                        reply.answer = { inclusion: 'on', started: self._inclusionStarted, delay: _delay, now: Date.now() };
-                    } else {
-                        reply.answer = "mySensors 'inclusion' command expects one 'on|off' argument, '"+_args1+"' found";
-                    }
-                    break;
-
-                default:
-                    reply.answer = "unknown '"+reply.args[0]+"' mySensors command";
-                    break;
-            }
-        } else {
-            reply.answer = "mySensors command expects at least one argument";
-        }
-        return Promise.resolve( reply );
-    }
-
     // when this feature has started
     _started = null;
-
-    // inclusion mode
-    _inclusionMode = false;
-    _inclusionStarted = null;
-    _inclusionTimeoutId = null;
-
-    // during inclusion mode, keep a cache of mySensors vs. controller data
-    //  index by mySensors/node_id
-    //  data name, equipId
-    _inclusionCache = null;
 
     // counters
     _counters = {
@@ -427,49 +342,6 @@ export class mySensors {
     }
 
     /**
-     * @param {String} nodeid
-     * @param {Object} res the request
-     */
-    inclusionCacheAdd( nodeid, res ){
-        const Msg = this.api().exports().Msg;
-        if( Object.keys( this._inclusionCache ).includes( nodeid )){
-            Msg.debug( 'mySensorsClass.inclusionCacheAdd() nodeid='+nodeid+' already set' );
-
-        } else if( res.OK ){
-            const _data = { name: res.OK.name, equipId: res.OK.equipId };
-            this._inclusionCache[nodeid] = _data;
-            Msg.debug( 'mySensorsClass.inclusionCacheAdd() nodeid='+nodeid, _data );
-
-        } else {
-            Msg.error( 'mySensorsClass.inclusionCacheAdd() nodeid='+nodeid, 'res=', res );
-        }
-    }
-
-    /**
-     * @param {mySensorsClass} instance
-     * @param {Boolean} set whether to start (true) or stop the inclusion mode
-     */
-    inclusionMode( instance, set ){
-        const Msg = instance.api().exports().Msg;
-        Msg.debug( 'mySensorsClass.inclusionMode() set='+set );
-        instance._inclusionMode = set;
-        const _fClear = function(){
-            if( instance._inclusionTimeoutId ){
-                clearTimeout( instance._inclusionTimeoutId );
-                instance._inclusionStarted = null;
-                instance._inclusionTimeoutId = null;
-            }
-            instance._inclusionCache = null;
-        };
-        _fClear();
-        if( set ){
-            instance._inclusionTimeoutId = setTimeout( instance.inclusionMode, instance.feature().config().mySensors.inclusionDelay, instance, false );
-            instance._inclusionCache = {};
-            instance._inclusionStarted = Date.now();
-        }
-    }
-
-    /**
      * Deal with messages received from a device: what to do with it?
      *  - either ignore, leaving to the MySensors library the responsability to handle it
      *  - directly answer to the device from the gateway
@@ -488,7 +360,7 @@ export class mySensors {
                 //  this is a good time to register them in the controller application (as far as we are in inclusion mode)
                 //  we buffer all these messages, sending the total to the controller when we thing we have all received
                 case mysConsts.C.C_PRESENTATION:
-                    if( this._inclusionMode ){
+                    if( mysTcp.inclusionMode()){
                         // create/set the node
                         if( msg.sensor_id === '255' ){
                             rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
@@ -498,25 +370,27 @@ export class mySensors {
                                 }
                             }).then(( res ) => {
                                 exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
-                                this.inclusionCacheAdd( msg.node_id, res );
+                                mysTcp.inclusionCacheAdd( this, msg.node_id, res );
                             });
                             // create/set a command
-                        } else if( Object.keys( this._inclusionCache ).includes( msg.node_id )){
-                            const equip = this._inclusionCache[msg.node_id];
-                            let _payload = {
-                                mySensors: {
-                                    sensorType: msg.type_str
-                                }
-                            };
-                            if( msg.payload && msg.payload.length ){
-                                _payload.mySensors.sensorName = msg.payload;
-                            }
-                            rest.request( this, 'PUT', '/v1/command/equipment/'+equip.equipId+'/'+msg.sensor_id, _payload )
-                                .then(( res ) => {
-                                    exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
-                                });
                         } else {
-                            exports.Msg.info( 'mySensors.incomingMessage() ignoring sensor presentation message as node is unknown', msg );
+                            const _equip = mysTcp.inclusionCacheGet( this, msg.node_id );
+                            if( _equip ){
+                                let _payload = {
+                                    mySensors: {
+                                        sensorType: msg.type_str
+                                    }
+                                };
+                                if( msg.payload && msg.payload.length ){
+                                    _payload.mySensors.sensorName = msg.payload;
+                                }
+                                rest.request( this, 'PUT', '/v1/command/equipment/'+_equip.equipId+'/'+msg.sensor_id, _payload )
+                                    .then(( res ) => {
+                                        exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
+                                    });
+                            } else {
+                                exports.Msg.info( 'mySensors.incomingMessage() ignoring sensor presentation message as node is unknown', msg );
+                            }
                         }
                     } else {
                         exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
@@ -558,28 +432,28 @@ export class mySensors {
                             exports.Logger.info( 'mySensors.incomingMessage()', msg );
                             break;
                         case mysConsts.I.I_SKETCH_NAME:
-                            if( this._inclusionMode && msg.sensor_id === '255' ){
+                            if( mysTcp.inclusionMode() && msg.sensor_id === '255' ){
                                 rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
                                         mySensors: {
                                             sketchName: msg.payload
                                         }
                                 }).then(( res ) => {
                                     exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
-                                    this.inclusionCacheAdd( msg.node_id, res );
+                                    mysTcp.inclusionCacheAdd( this, msg.node_id, res );
                                 });
                             } else {
                                 exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
                             }
                             break;
                         case mysConsts.I.I_SKETCH_VERSION:
-                            if( this._inclusionMode && msg.sensor_id === '255' ){
+                            if( mysTcp.inclusionMode() && msg.sensor_id === '255' ){
                                 rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
                                         mySensors: {
                                             sketchVersion: msg.payload
                                         }
                                 }).then(( res ) => {
                                     exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
-                                    this.inclusionCacheAdd( msg.node_id, res );
+                                    mysTcp.inclusionCacheAdd( this, msg.node_id, res );
                                 });
                             } else {
                                 exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
@@ -693,9 +567,9 @@ export class mySensors {
         const exports = this.api().exports();
         exports.Msg.debug( 'mySensors.ready()' );
         const self = this;
-        Object.keys( mySensors.verbs ).every(( key ) => {
-            const o = mySensors.verbs[key];
-            self.ITcpServer.add( key, o.label, o.fn, o.end ? o.end : false );
+        Object.keys( mysTcp.verbs ).every(( key ) => {
+            const o = mysTcp.verbs[key];
+            self.ITcpServer.add( key, o.label, mysTcp[o.fn], o.end ? o.end : false );
             return true;
         });
     }

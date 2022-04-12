@@ -137,3 +137,10 @@ mysCellar node startup
 7110,"mySensors.mqttReceived()","4":"topic=jeedomv4/mySensors/fromDevice/4/51/1/0/16"}
 7110,"mySensors.incomingMessages()","4":{"node_id":"4","sensor_id":"51","command":"1","command_str":"C_SET","ack":"0","type":"16","type_str":"V_TRIPPED","payload":"0","sens":"incoming"}}
 7110,"mySensors.sendToController() command=setValue","4":{"node_id":"4","sensor_id":"51","command":"1","command_str":"C_SET","ack":"0","type":"16","type_str":"V_TRIPPED","payload":"0","sens":"incoming"}}
+
+jeedomv4/mySensors/fromDevice/5/255/0/0/18          "2.3.1-pwi"
+jeedomv4/mySensors/fromDevice/5/255/3/0/11          "mysCellar"
+jeedomv4/mySensors/fromDevice/5/255/3/0/12          "7.8-2019"
+
+jeedomv4/mySensors/fromDevice/5/2/0/0/23            "Config dump"
+jeedomv4/mySensors/fromDevice/5/10/0/0/32           "Flood detection"
