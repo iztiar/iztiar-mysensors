@@ -4,7 +4,7 @@
 import axios from 'axios';
 import https from 'https';
 
-export const rest = {
+export const mysRest = {
 
     /**
      * @param {mySensors} instance

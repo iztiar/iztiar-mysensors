@@ -7,7 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { IMqttBus, INetBus, ISerialBus, mysConsts, mysMessage, rest, mysTcp } from './imports.js';
+import { IMqttBus, INetBus, ISerialBus, mysConsts, mysMessage, mysRest, mysTcp } from './imports.js';
 
 export class mySensors {
 
@@ -363,7 +363,7 @@ export class mySensors {
                     if( mysTcp.inclusionMode()){
                         // create/set the node
                         if( msg.sensor_id === '255' ){
-                            rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
+                            mysRest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
                                 mySensors: {
                                     nodeType: msg.type_str,
                                     libVersion: msg.payload
@@ -384,7 +384,7 @@ export class mySensors {
                                 if( msg.payload && msg.payload.length ){
                                     _payload.mySensors.sensorName = msg.payload;
                                 }
-                                rest.request( this, 'PUT', '/v1/command/equipment/'+_equip.equipId+'/'+msg.sensor_id, _payload )
+                                mysRest.request( this, 'PUT', '/v1/command/equipment/'+_equip.equipId+'/'+msg.sensor_id, _payload )
                                     .then(( res ) => {
                                         exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
                                     });
@@ -413,7 +413,7 @@ export class mySensors {
                             break;
                         // request a new Id from a controller, have to answer to the device
                         case mysConsts.I.I_ID_REQUEST:
-                            rest.request( this, 'GET', '/v1/counter/mySensors/next' ).then(( res ) => {
+                            mysRest.request( this, 'GET', '/v1/counter/mySensors/next' ).then(( res ) => {
                                 //exports.Msg.debug( 'mySensors.incomingMessages() res='+res );
                                 if( res ){
                                     msg.setType( mysConsts.I.I_ID_RESPONSE );
@@ -433,7 +433,7 @@ export class mySensors {
                             break;
                         case mysConsts.I.I_SKETCH_NAME:
                             if( mysTcp.inclusionMode() && msg.sensor_id === '255' ){
-                                rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
+                                mysRest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
                                         mySensors: {
                                             sketchName: msg.payload
                                         }
@@ -447,7 +447,7 @@ export class mySensors {
                             break;
                         case mysConsts.I.I_SKETCH_VERSION:
                             if( mysTcp.inclusionMode() && msg.sensor_id === '255' ){
-                                rest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
+                                mysRest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
                                         mySensors: {
                                             sketchVersion: msg.payload
                                         }
@@ -590,7 +590,7 @@ export class mySensors {
         this._counters.toController += 1;
         switch( command ){
             case 'createDevice':
-                rest.put( this, '/v1/equipment/class/mySensors/'+msg.node_id, msg );
+                mysRest.put( this, '/v1/equipment/class/mySensors/'+msg.node_id, msg );
                 break;
             default:
                 Msg.warn( 'mySensors.sendToController() unknown command='+command );
