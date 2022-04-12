@@ -576,11 +576,8 @@ export class mySensors {
 
     /**
      * @param {String} command
-     *  createDevice
      *  requestValue
      *  setBatteryLevel
-     *  setSketchName
-     *  setSketchVersion
      *  setValue
      * @param {mysMessage} msg
      */
