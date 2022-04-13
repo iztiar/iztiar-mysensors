@@ -7,7 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { IMqttBus, INetBus, ISerialBus, mysConsts, mysMessage, mysRest, mysTcp } from './imports.js';
+import { IMqttBus, INetBus, ISerialBus, mysProto, mysTcp } from './imports.js';
 
 export class mySensors {
 
@@ -91,19 +91,19 @@ export class mySensors {
             })
             .then(() => {
                 Interface.add( this, IMqttBus, {
-                    v_incomingMessage: this.incomingMessage
+                    v_incomingMessage: this._incomingMessage
                 });
                 _promise = _promise.then(() => { Interface.fillConfig( this, 'IMqttBus' ); });
             })
             .then(() => {
                 Interface.add( this, INetBus, {
-                    v_incomingMessage: this.incomingMessage
+                    v_incomingMessage: this._incomingMessage
                 });
                 _promise = _promise.then(() => { Interface.fillConfig( this, 'IMqttBus' ); });
             })
             .then(() => {
                 Interface.add( this, ISerialBus, {
-                    v_incomingMessage: this.incomingMessage
+                    v_incomingMessage: this._incomingMessage
                 });
                 _promise = _promise.then(() => { Interface.fillConfig( this, 'IMqttBus' ); });
             })
@@ -138,6 +138,18 @@ export class mySensors {
             }
         }
         return _promise;
+    }
+
+    /*
+     * Deal with messages received from a device: what to do with it?
+     *  - either ignore, leaving to the MySensors library the responsability to handle it
+     *  - directly answer to the device from the gateway
+     *  - forward the information/action to the controlling application
+     * @param {mysMessage} msg
+     */
+    _incomingMessage( msg ){
+        this._counters.fromDevices += 1;
+        mysProto.incomingMessage( this, msg );
     }
 
     /*
@@ -341,171 +353,6 @@ export class mySensors {
         }
     }
 
-    /**
-     * Deal with messages received from a device: what to do with it?
-     *  - either ignore, leaving to the MySensors library the responsability to handle it
-     *  - directly answer to the device from the gateway
-     *  - forward the information/action to the controlling application
-     * @param {mysMessage} msg
-     */
-    incomingMessage( msg ){
-        this._counters.fromDevices += 1;
-        const exports = this.api().exports();
-        exports.Msg.debug( 'mySensors.incomingMessages()', msg );
-        if( msg.isIncomingAck()){
-            exports.Msg.info( 'mySensors.incomingMessage() ignoring incoming ack message', msg );
-        } else {
-            switch( msg.command ){
-                // presentation message are sent by the device on each boot of the device
-                //  this is a good time to register them in the controller application (as far as we are in inclusion mode)
-                //  we buffer all these messages, sending the total to the controller when we thing we have all received
-                case mysConsts.C.C_PRESENTATION:
-                    if( mysTcp.inclusionMode()){
-                        // create/set the node
-                        if( msg.sensor_id === '255' ){
-                            mysRest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
-                                mySensors: {
-                                    nodeType: msg.type_str,
-                                    libVersion: msg.payload
-                                }
-                            }).then(( res ) => {
-                                exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
-                                mysTcp.inclusionCacheAdd( this, msg.node_id, res );
-                            });
-                            // create/set a command
-                        } else {
-                            const _equip = mysTcp.inclusionCacheGet( this, msg.node_id );
-                            if( _equip ){
-                                let _payload = {
-                                    mySensors: {
-                                        sensorType: msg.type_str
-                                    }
-                                };
-                                if( msg.payload && msg.payload.length ){
-                                    _payload.mySensors.sensorName = msg.payload;
-                                }
-                                mysRest.request( this, 'PUT', '/v1/command/equipment/'+_equip.equipId+'/'+msg.sensor_id, _payload )
-                                    .then(( res ) => {
-                                        exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
-                                    });
-                            } else {
-                                exports.Msg.info( 'mySensors.incomingMessage() ignoring sensor presentation message as node is unknown', msg );
-                            }
-                        }
-                    } else {
-                        exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
-                    }
-                    break;
-                case mysConsts.C.C_SET:
-                    this.sendToController( 'setValue', msg );
-                    break;
-                case mysConsts.C.C_REQ:
-                    this.sendToController( 'requestValue', msg );
-                    break;
-                // some of the internal messages are to be forwarded to the controlling application
-                //  while some may be answered by the gateway itself
-                //  some are not incoming message at all
-                case mysConsts.C.C_INTERNAL:
-                    switch( msg.type ){
-                        // to be transmitted to the controller
-                        case mysConsts.I.I_BATTERY_LEVEL:
-                            this.sendToController( 'setBatteryLevel', msg );
-                            break;
-                        // request a new Id from a controller, have to answer to the device
-                        case mysConsts.I.I_ID_REQUEST:
-                            mysRest.request( this, 'GET', '/v1/counter/mySensors/next' ).then(( res ) => {
-                                //exports.Msg.debug( 'mySensors.incomingMessages() res='+res );
-                                if( res ){
-                                    msg.setType( mysConsts.I.I_ID_RESPONSE );
-                                    this.sendToDevice( msg, res.lastId );
-                                }
-                            });
-                            break;
-                        // to be answered by the gateway
-                        case mysConsts.I.I_TIME:
-                            this.sendToDevice( msg, Date.now());
-                            break;
-                        case mysConsts.I.I_CONFIG:
-                            this.sendToDevice( msg, this.feature().config().mySensors.config );
-                            break;
-                        case mysConsts.I.I_LOG_MESSAGE:
-                            exports.Logger.info( 'mySensors.incomingMessage()', msg );
-                            break;
-                        case mysConsts.I.I_SKETCH_NAME:
-                            if( mysTcp.inclusionMode() && msg.sensor_id === '255' ){
-                                mysRest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
-                                        mySensors: {
-                                            sketchName: msg.payload
-                                        }
-                                }).then(( res ) => {
-                                    exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
-                                    mysTcp.inclusionCacheAdd( this, msg.node_id, res );
-                                });
-                            } else {
-                                exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
-                            }
-                            break;
-                        case mysConsts.I.I_SKETCH_VERSION:
-                            if( mysTcp.inclusionMode() && msg.sensor_id === '255' ){
-                                mysRest.request( this, 'PUT', '/v1/equipment/class/mySensors/'+msg.node_id+'/add', {
-                                        mySensors: {
-                                            sketchVersion: msg.payload
-                                        }
-                                }).then(( res ) => {
-                                    exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
-                                    mysTcp.inclusionCacheAdd( this, msg.node_id, res );
-                                });
-                            } else {
-                                exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
-                            }
-                            break;
-                        case mysConsts.I.I_DEBUG:
-                            exports.Logger.debug( 'mySensors.incomingMessage()', msg );
-                            break;
-                        // these messages should never be incoming from the devices or are just ignored
-                        case mysConsts.I.I_VERSION:
-                        case mysConsts.I.I_INCLUSION_MODE:
-                        case mysConsts.I.I_ID_RESPONSE:
-                        case mysConsts.I.I_FIND_PARENT:
-                        case mysConsts.I.I_FIND_PARENT_RESPONSE:
-                        case mysConsts.I.I_CHILDREN:
-                        case mysConsts.I.I_REBOOT:
-                        case mysConsts.I.I_GATEWAY_READY:
-                        case mysConsts.I.I_SIGNING_PRESENTATION:
-                        case mysConsts.I.I_NONCE_REQUEST:
-                        case mysConsts.I.I_NONCE_RESPONSE:
-                        case mysConsts.I.I_PRESENTATION:
-                        case mysConsts.I.I_LOCKED:
-                        case mysConsts.I.I_PING:
-                        case mysConsts.I.I_PONG:
-                        case mysConsts.I.I_HEARTBEAT_REQUEST:
-                        case mysConsts.I.I_DISCOVER_REQUEST:
-                        case mysConsts.I.I_DISCOVER_RESPONSE:
-                        case mysConsts.I.I_HEARTBEAT_RESPONSE:
-                        case mysConsts.I.I_REGISTRATION_REQUEST:
-                        case mysConsts.I.I_REGISTRATION_RESPONSE:
-                        case mysConsts.I.I_SIGNAL_REPORT_REQUEST:
-                        case mysConsts.I.I_SIGNAL_REPORT_REVERSE:
-                        case mysConsts.I.I_SIGNAL_REPORT_RESPONSE:
-                        case mysConsts.I.I_PRE_SLEEP_NOTIFICATION:
-                        case mysConsts.I.I_POST_SLEEP_NOTIFICATION:
-                            exports.Msg.info( 'mySensors.incomingMessage() ignoring unexpected internal message', msg );
-                            break;
-                        default:
-                            exports.Msg.error( 'mySensors.incomingMessage() ignoring unknown type', msg );
-                            break;
-                    }
-                    break;
-                case mysConsts.C.C_STREAM:
-                    exports.Msg.info( 'mySensors.incomingMessage() unexpected command (not the right sens for an OTA firmware update)', msg );
-                    break;
-                default:
-                    exports.Msg.error( 'mySensors.incomingMessage() unknown command', msg );
-                    break;
-            }
-        }
-    }
-
     /*
      * If the service had to be SIGKILL'ed to be stoppped, then gives it an opportunity to make some cleanup
      */
@@ -566,51 +413,6 @@ export class mySensors {
         super.ready();
         this.api().exports().Msg.debug( 'mySensors.ready()' );
         mysTcp.ready( this );
-    }
-
-    /**
-     * @param {String} command
-     *  requestValue
-     *  setBatteryLevel
-     *  setValue
-     * @param {mysMessage} msg
-     */
-    sendToController( command, msg ){
-        const Msg = this.api().exports().Msg;
-        Msg.debug( 'mySensors.sendToController() command='+command, msg );
-        this._counters.toController += 1;
-        switch( command ){
-            case 'createDevice':
-                mysRest.put( this, '/v1/equipment/class/mySensors/'+msg.node_id, msg );
-                break;
-            default:
-                Msg.warn( 'mySensors.sendToController() unknown command='+command );
-                break;
-        }
-    }
-
-    /**
-     * @param {mysMessage} msg the message to send
-     * @param {*} payload the data to answer
-     */
-    sendToDevice( msg, payload ){
-        const exports = this.api().exports();
-        //exports.Msg.debug( 'mySensors.sendToDevice(), msg=', msg );
-        msg.sens = mysMessage.c.OUTGOING;
-        msg.requestAck();
-        msg.setPayload( payload );
-        switch( this.feature().config().mySensors.type ){
-            case 'mqtt':
-                this.IMqttBus.send( msg );
-                break;
-            case 'net':
-                this.INetBus.send( msg );
-                break;
-            case 'serial':
-                this.ISerialBus.send( msg );
-                break;
-        }
-        this._counters.toDevices += 1;
     }
 
     /**

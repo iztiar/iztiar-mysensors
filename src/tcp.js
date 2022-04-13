@@ -155,7 +155,7 @@ export const mysTcp = {
     },
 
     /**
-     * @param {mySensorsClass} instance
+     * @param {mySensors} instance
      * @param {Boolean} set whether to start (true) or stop the inclusion mode
      *  started is only reset on 'off->on' transitions, not on 'on->on'
      *  cache is never reset
