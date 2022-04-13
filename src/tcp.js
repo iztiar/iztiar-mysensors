@@ -157,7 +157,8 @@ export const mysTcp = {
     /**
      * @param {mySensorsClass} instance
      * @param {Boolean} set whether to start (true) or stop the inclusion mode
-     *  started, cache are only reset on 'off->on' transitions, not on 'on->on'
+     *  started is only reset on 'off->on' transitions, not on 'on->on'
+     *  cache is never reset
      */
     inclusionSet( instance, set=false ){
         const Msg = instance.api().exports().Msg;
@@ -177,12 +178,12 @@ export const mysTcp = {
 
         // setting the inclusion mode on while already in inclusion mode reset the timeout, but not the cache
         if( set ){
-            const _delay = instance.feature().config().mySensors.inclusionDelay;
-            mysTcp.inclusion.timeoutId = setTimeout( mysTcp.inclusionSet, _delay, instance, false );
-            mysTcp.inclusion.tsEnding = Date.now()+_delay;
+            const ts = Date.now();
+            const delay = instance.feature().config().mySensors.inclusionDelay;
+            mysTcp.inclusion.timeoutId = setTimeout( mysTcp.inclusionSet, delay, instance, false );
+            mysTcp.inclusion.tsEnding = ts+delay;
             if( !_previous ){
-                mysTcp.inclusion.tsStarted = Date.now();
-                mysTcp.inclusion.cache = {};
+                mysTcp.inclusion.tsStarted = ts;
             }
         }
     }
