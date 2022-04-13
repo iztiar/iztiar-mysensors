@@ -50,7 +50,8 @@ export const mysProto = {
     //  while some may be answered by the gateway itself
     //  some are not incoming message at all
     incomingInternal: function( instance, msg ){
-        const Msg = instance.api().exports().Msg;
+        const exports = instance.api().exports();
+        const Msg = exports.Msg;
         switch( msg.type ){
             // to be transmitted to the controller
             case mysConsts.I.I_BATTERY_LEVEL:
@@ -76,7 +77,7 @@ export const mysProto = {
                 break;
             // to be dealed with by the gateway
             case mysConsts.I.I_LOG_MESSAGE:
-                exports.Logger.info( 'mySensors.incomingMessage()', msg );
+                exports.Logger.info( 'mysProto.incomingInternal()', msg );
                 break;
             case mysConsts.I.I_SKETCH_NAME:
                 if( mysTcp.inclusionMode() && msg.sensor_id === '255' ){
@@ -85,11 +86,11 @@ export const mysProto = {
                                 sketchName: msg.payload
                             }
                     }).then(( res ) => {
-                        exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
+                        Msg.debug( 'mysProto.incomingInternal() res=', res );
                         mysTcp.inclusionCacheAdd( instance, msg.node_id, res );
                     });
                 } else {
-                    exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
+                    Msg.info( 'mysProto.incomingInternal() ignoring presentation message while not in inclusion mode', msg );
                 }
                 break;
             case mysConsts.I.I_SKETCH_VERSION:
@@ -99,16 +100,16 @@ export const mysProto = {
                                 sketchVersion: msg.payload
                             }
                     }).then(( res ) => {
-                        exports.Msg.debug( 'mySensors.incomingMessages() res=', res );
+                        Msg.debug( 'mysProto.incomingInternal() res=', res );
                         mysTcp.inclusionCacheAdd( instance, msg.node_id, res );
                     });
                 } else {
-                    exports.Msg.info( 'mySensors.incomingMessage() ignoring presentation message while not in inclusion mode', msg );
+                    Msg.info( 'mysProto.incomingInternal() ignoring presentation message while not in inclusion mode', msg );
                 }
                 break;
             // to be dealed with by the gateway
             case mysConsts.I.I_DEBUG:
-                exports.Logger.debug( 'mySensors.incomingMessage()', msg );
+                exports.Logger.debug( 'mysProto.incomingInternal()', msg );
                 break;
             // these messages should never be incoming from the devices or are just ignored
             case mysConsts.I.I_VERSION:
@@ -137,10 +138,10 @@ export const mysProto = {
             case mysConsts.I.I_SIGNAL_REPORT_RESPONSE:
             case mysConsts.I.I_PRE_SLEEP_NOTIFICATION:
             case mysConsts.I.I_POST_SLEEP_NOTIFICATION:
-                exports.Msg.info( 'mysProto.incomingInternal() ignoring unexpected internal message', msg );
+                Msg.info( 'mysProto.incomingInternal() ignoring unexpected internal message', msg );
                 break;
             default:
-                exports.Msg.error( 'mysProto.incomingInternal() ignoring unknown type', msg );
+                Msg.error( 'mysProto.incomingInternal() ignoring unknown type', msg );
                 break;
         }
     },
@@ -246,4 +247,4 @@ export const mysProto = {
         }
         instance._counters.toDevices += 1;
     }
-}
+};

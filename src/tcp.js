@@ -2,6 +2,8 @@
  * mysTcp: manage the TCP commands
  */
 
+import { mysMqtt } from "./imports.js";
+
 export const mysTcp = {
 
     // inclusion mode
@@ -88,33 +90,27 @@ export const mysTcp = {
     //  inclusion on    -> set the inclusion + returns the current status
     //  inclusion off   -> clear the inclusion + returns the current status
     inclusionCmd: function( instance, reply ){
-        const utils = instance.api().exports().utils;
-        const _args1 = reply.args.length >= 2 ? reply.args[1] : null;
+        const Msg = instance.api().exports().Msg;
+        const _arg1 = reply.args.length >= 2 ? reply.args[1] : null;
+        Msg.debug( 'mysTcp.inclusionCmd() reply=', reply );
+        Msg.debug( 'mysTcp.inclusionCmd() arg1='+_arg1 );
 
         // set the inclusion mode if asked for
-        if( _args1 === 'on' || _args1 === 'off' ){
-            mysTcp.inclusionSet( instance, _args1 === 'on' );
+        if( _arg1 === 'on' || _arg1 === 'off' ){
+            mysTcp.inclusionSet( instance, _arg1 === 'on' );
         }
 
-        // return the inclusion status
+        // return an extended inclusion status
         const _delay = instance.feature().config().mySensors.inclusionDelay;
-        if( _args1 === 'off' || ( _args1 === null && !mysTcp.inclusionMode())){
-            reply.answer = {
-                inclusion: 'off',
-                delay: _delay
-            };
-
-        } else if( _args1 === 'on' || ( _args1 === null && mysTcp.inclusionMode())){
-            reply.answer = {
-                inclusion: 'on',
-                delay: _delay,
-                started: utils.humanStamp( mysTcp.inclusion.tsStarted ),
-                ending: utils.humanStamp( mysTcp.inclusion.tsEnding ),
-                known: mysTcp.inclusion.cache
-            };
+        if( _arg1 === 'on' || _arg1 === 'off' || !_arg1 ){
+            reply.answer = mysTcp.inclusionStatus( instance );
+            reply.answer.delay = _delay;
+            // and publish the new inclusion status
+            mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ));
+            mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ));
 
         } else {
-            reply.answer = "mySensors 'inclusion' command expects one 'on|off' argument, '"+_args1+"' found";
+            reply.answer = "mySensors 'inclusion' command expects one 'on|off' argument, '"+_arg1+"' found";
         }
     },
 
@@ -145,6 +141,18 @@ export const mysTcp = {
      */
     inclusionCacheGet: function( instance, nodeid ){
         return mysTcp.inclusion.cache[nodeid] || null;
+    },
+
+    /**
+     * @param {mySensors} instance
+     * @returns {Object} inclusion configuration
+     */
+    inclusionConfig( instance ){
+        const config = instance.feature().config();
+        return {
+            inclusionDelay: config.mySensors.inclusionDelay,
+            inclusionAdvertise: config.mySensors.inclusionAdvertise,
+        }
     },
 
     /**
@@ -189,15 +197,44 @@ export const mysTcp = {
     },
 
     /**
+     * @param {mySensors} instance
+     * @returns {Object} inclusion current status
+     */
+    inclusionStatus( instance ){
+        const utils = instance.api().exports().utils;
+        let s = {
+            inclusion: mysTcp.inclusion.mode ? 'on':'off',
+            known: mysTcp.inclusion.cache
+        };
+        if( mysTcp.inclusion.mode ){
+            s.started = utils.humanStamp( mysTcp.inclusion.tsStarted );
+            s.ending = utils.humanStamp( mysTcp.inclusion.tsEnding );
+        }
+        return s;
+    },
+
+    /**
      * Called by mySensors.ready()
      * @param {mySensors} instance
      */
     ready( instance ){
         instance.api().exports().Msg.debug( 'mysTcp.ready()' );
+        // define add-on verbs to ITcpServer
         Object.keys( mysTcp.verbs ).every(( key ) => {
             const o = mysTcp.verbs[key];
             instance.ITcpServer.add( key, o.label, mysTcp[o.fn], o.end ? o.end : false );
             return true;
         });
+    },
+
+    /**
+     * Called from mySensors.iforkableStart()
+     * @param {mySensors} instance
+     */
+    start( instance ){
+        instance.api().exports().Msg.debug( 'mysTcp.start()' );
+        // publish inclusion status
+        mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ));
+        mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ));
     }
 };

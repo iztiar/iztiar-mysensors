@@ -7,7 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { IMqttBus, INetBus, ISerialBus, mysProto, mysTcp } from './imports.js';
+import { IMqttBus, INetBus, ISerialBus, mysMqtt, mysProto, mysTcp } from './imports.js';
 
 export class mySensors {
 
@@ -185,6 +185,8 @@ export class mySensors {
                             break;
                     }
                 })
+                .then(() => { mysMqtt.start( this ); })
+                .then(() => { mysTcp.start( this ); })
                 .then(() => { return new Promise(() => {}); });
         } else {
             return Promise.resolve( exports.IForkable.fork( name, cb, args ));
@@ -329,6 +331,9 @@ export class mySensors {
                 }
                 if( !_config.mySensors.inclusionDelay ){
                     _config.mySensors.inclusionDelay = mySensors.d.inclusionDelay;
+                }
+                if( !_config.mySensors.inclusionAdvertise ){
+                    _config.mySensors.inclusionAdvertise = mySensors.d.inclusionAdvertise;
                 }
             })
             .then(() => { return this._fillConfigRestUrl( _config ); })
