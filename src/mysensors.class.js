@@ -564,14 +564,8 @@ export class mySensors {
      */
     ready(){
         super.ready();
-        const exports = this.api().exports();
-        exports.Msg.debug( 'mySensors.ready()' );
-        const self = this;
-        Object.keys( mysTcp.verbs ).every(( key ) => {
-            const o = mysTcp.verbs[key];
-            self.ITcpServer.add( key, o.label, mysTcp[o.fn], o.end ? o.end : false );
-            return true;
-        });
+        this.api().exports().Msg.debug( 'mySensors.ready()' );
+        mysTcp.ready( this );
     }
 
     /**

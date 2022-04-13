@@ -186,5 +186,18 @@ export const mysTcp = {
                 mysTcp.inclusion.tsStarted = ts;
             }
         }
+    },
+
+    /**
+     * Called by mySensors.ready()
+     * @param {mySensors} instance
+     */
+    ready( instance ){
+        instance.api().exports().Msg.debug( 'mysTcp.ready()' );
+        Object.keys( mysTcp.verbs ).every(( key ) => {
+            const o = mysTcp.verbs[key];
+            instance.ITcpServer.add( key, o.label, mysTcp[o.fn], o.end ? o.end : false );
+            return true;
+        });
     }
 };
