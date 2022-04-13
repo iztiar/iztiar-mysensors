@@ -21,8 +21,9 @@ export const mysMqtt = {
      * @param {mySensors} Instance
      * @param {String} topic
      * @param {String} payload
+     * @param {Object} options
      */
-    publish( instance, topic, payload ){
+    publish( instance, topic, payload, options ){
         const Msg = instance.api().exports().Msg;
         if( mysMqtt.connection ){
             let _topic = mysMqtt.publishTopic;
@@ -30,7 +31,13 @@ export const mysMqtt = {
                 _topic += '/';
             }
             _topic += topic;
-            mysMqtt.connection.publish( _topic, payload, { retain: true });
+            const _options = {
+                ...options
+            }
+            Object.keys( payload ).every(( k ) => {
+                mysMqtt.connection.publish( _topic+'/'+k, payload[k], _options );
+                return true;
+            })
         } else {
             Msg.warn( 'mysMqtt.publish() no client connection' );
         }

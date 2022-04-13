@@ -97,6 +97,10 @@ export const mysTcp = {
         // set the inclusion mode if asked for
         if( _arg1 === 'on' || _arg1 === 'off' ){
             mysTcp.inclusionSet( instance, _arg1 === 'on' );
+        } else if( !_arg1 ){
+            // and publish the new inclusion status
+            mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ), { retain: true });
+            mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ), { retain: true });
         }
 
         // return an extended inclusion status
@@ -192,8 +196,8 @@ export const mysTcp = {
         }
 
         // and publish the new inclusion status
-        mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ));
-        mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ));
+        mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ), { retain: true });
+        mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ), { retain: true });
     },
 
     /**
@@ -234,7 +238,7 @@ export const mysTcp = {
     start( instance ){
         instance.api().exports().Msg.debug( 'mysTcp.start()' );
         // publish inclusion status
-        mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ));
-        mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ));
+        mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ), { retain: true });
+        mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ), { retain: true });
     }
 };
