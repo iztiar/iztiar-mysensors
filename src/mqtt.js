@@ -46,7 +46,7 @@ export const mysMqtt = {
         const utils = this.api().exports().utils;
         Msg.debug( 'mysMqtt.receive() topic='+topic, 'payload='+payload );
         const _cmdTopic = mysMqtt.publishTopic+'/cmd/';
-        const _payloadStr = JSON.parse( payload );
+        const _payloadStr = payload && payload.toString().length ? JSON.parse( payload ) : "";
         if( topic.startsWith( _cmdTopic )){
             const _command = topic.substring( _cmdTopic.length );
             Msg.debug( 'mysMqtt.receive() command='+_command );

@@ -93,7 +93,6 @@ export const mysTcp = {
         const Msg = instance.api().exports().Msg;
         const _arg1 = reply.args.length >= 2 ? reply.args[1] : null;
         Msg.debug( 'mysTcp.inclusionCmd() reply=', reply );
-        Msg.debug( 'mysTcp.inclusionCmd() arg1='+_arg1 );
 
         // set the inclusion mode if asked for
         if( _arg1 === 'on' || _arg1 === 'off' ){
@@ -105,9 +104,6 @@ export const mysTcp = {
         if( _arg1 === 'on' || _arg1 === 'off' || !_arg1 ){
             reply.answer = mysTcp.inclusionStatus( instance );
             reply.answer.delay = _delay;
-            // and publish the new inclusion status
-            mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ));
-            mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ));
 
         } else {
             reply.answer = "mySensors 'inclusion' command expects one 'on|off' argument, '"+_arg1+"' found";
@@ -194,6 +190,10 @@ export const mysTcp = {
                 mysTcp.inclusion.tsStarted = ts;
             }
         }
+
+        // and publish the new inclusion status
+        mysMqtt.publish( instance, 'inclusion/status', mysTcp.inclusionStatus( instance ));
+        mysMqtt.publish( instance, 'inclusion/conf', mysTcp.inclusionConfig( instance ));
     },
 
     /**
