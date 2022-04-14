@@ -88,12 +88,19 @@ export const mysMqtt = {
      * @param {mySensors} instance
      */
     start( instance ){
-        instance.api().exports().Msg.debug( 'mysMqtt.start()' );
+        const Msg = instance.api().exports().Msg;
+        Msg.debug( 'mysMqtt.start()' );
         const _clients = instance.IMqttClient.getConnections();
-        const _conf = instance.feature().config();
-        if( _clients[_conf.izMqtt] ){
-            mysMqtt.connection = _clients[_conf.izMqtt];
-            mysMqtt.connection.subscribe( mysMqtt.subscribedTopic, instance, mysMqtt.receive );
-        }
+        Object.keys( _clients ).every(( key ) => {
+            const _connect = _clients[key];
+            const _conf = _connect.config();
+            if( _conf.publications.documents ){
+                Msg.verbose( 'mqtt.start() identifying \''+key+'\' connection' );
+                mysMqtt.connection = _connect;
+                mysMqtt.connection.subscribe( mysMqtt.subscribedTopic, instance, mysMqtt.receive );
+                return false;
+            }
+            return true;
+        });
     }
 };
