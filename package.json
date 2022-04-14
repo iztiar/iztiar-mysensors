@@ -36,6 +36,6 @@
   },
   "engines": {
     "node": ">12.x",
-    "@iztiar/iztiar-core": ">=0.8"
+    "@iztiar/iztiar-core": ">=0.9"
   }
 }
