@@ -12,10 +12,25 @@ import { mysTcp } from "./imports.js";
 export const mysMqtt = {
 
     subscribedTopic: 'iztiar/#',
-    publishTopic: 'iztiar/$IZ/mySensors',
+    publishTopic: 'iztiar/$IZ/',
 
     // the MqttConnect client connection to iztiar message bus
     connection: null,
+
+    /**
+     * @param {mySensors} Instance
+     * @param {String} reqTopic
+     * @returns {Strig} the topic to be used for the publication
+     */
+    pubTopic( instance, reqTopic ){
+        let _topic = mysMqtt.publishTopic;
+        _topic += instance.feature().name();
+        if( reqTopic.charAt(0) !== '/' ){
+            _topic += '/';
+        }
+        _topic += reqTopic;
+        return _topic;
+    },
 
     /**
      * @param {mySensors} Instance
@@ -26,11 +41,7 @@ export const mysMqtt = {
     publish( instance, topic, payload, options ){
         const Msg = instance.api().exports().Msg;
         if( mysMqtt.connection ){
-            let _topic = mysMqtt.publishTopic;
-            if( topic.charAt(0) !== '/' ){
-                _topic += '/';
-            }
-            _topic += topic;
+            const _topic = mysMqtt.pubTopic( instance, topic );
             const _options = {
                 ...options
             }
@@ -52,7 +63,7 @@ export const mysMqtt = {
         const Msg = this.api().exports().Msg;
         const utils = this.api().exports().utils;
         Msg.debug( 'mysMqtt.receive() topic='+topic, 'payload='+payload );
-        const _cmdTopic = mysMqtt.publishTopic+'/cmd/';
+        const _cmdTopic = mysMqtt.pubTopic( this, '/cmd/' );
         const _payloadStr = payload && payload.toString().length ? JSON.parse( payload ) : "";
         if( topic.startsWith( _cmdTopic )){
             const _command = topic.substring( _cmdTopic.length );
